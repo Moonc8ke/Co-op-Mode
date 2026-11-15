@@ -1,0 +1,99 @@
+@import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,400;1,6..72,500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Newsreader", Georgia, "Times New Roman", serif;
+}
+
+:root {
+  color-scheme: light dark;
+  --bg: #fff7ed;
+  --surface: #fffdf9;
+  --surface-alt: #fdf1e0;
+  --text: #292524;
+  --dim: #78716c;
+  --border: #ead9c2;
+  --accent: #9a3412;
+  --accent-soft: #fde8d8;
+  --sage: #5b7553;
+  --sage-soft: #e6edda;
+  --rose: #be6a7a;
+  --rose-soft: #f9e3e6;
+  --gold: #b07d2b;
+  --gold-soft: #f7ecd2;
+  --sky: #4a6d8c;
+  --sky-soft: #e0eaf2;
+  --plum: #6d4a63;
+  --plum-soft: #efe2eb;
+  --teal: #2f7d74;
+  --teal-soft: #ddefe9;
+  --berry: #9d4a68;
+  --berry-soft: #f6e0e9;
+  --olive: #687c26;
+  --olive-soft: #eef2d5;
+  --radius: 14px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1512;
+    --surface: #292019;
+    --surface-alt: #33271e;
+    --text: #f5ede4;
+    --dim: #b8a894;
+    --border: #4a382a;
+    --accent: #f0a35e;
+    --accent-soft: #46301d;
+    --sage: #a9c79b;
+    --sage-soft: #33402c;
+    --rose: #e3a3ae;
+    --rose-soft: #472c31;
+    --gold: #dcb36a;
+    --gold-soft: #453a1f;
+    --sky: #9dbfd9;
+    --sky-soft: #2c3d4a;
+    --plum: #cfa8c2;
+    --plum-soft: #3f2c39;
+    --teal: #8fd0c2;
+    --teal-soft: #27423c;
+    --berry: #dfa0b8;
+    --berry-soft: #432a36;
+    --olive: #c6d68a;
+    --olive-soft: #353d1e;
+  }
+}
+
+@layer base {
+  button, [role="button"], select, summary, input:not([type="checkbox"], [type="radio"]) {
+    min-height: 2.25rem;
+  }
+}
+
+/* Scrapbook washi-tape strip on polaroids */
+.tape::before {
+  content: "";
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-2deg);
+  width: 72px;
+  height: 20px;
+  background: color-mix(in srgb, var(--gold) 35%, transparent);
+  border-left: 1px dashed color-mix(in srgb, var(--gold) 45%, transparent);
+  border-right: 1px dashed color-mix(in srgb, var(--gold) 45%, transparent);
+  border-radius: 2px;
+  z-index: 1;
+}
+
+@keyframes pop-in {
+  0% { transform: scale(0.92); opacity: 0; }
+  60% { transform: scale(1.03); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.pop-in {
+  animation: pop-in 0.35s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pop-in { animation: none; }
+}

@@ -1,0 +1,216 @@
+# Couples App
+
+A shared app for two people — Andrew & Juliette. One place for the things
+a couple plans and remembers together:
+
+- **Seasonal bucket list** with season tabs (Spring / Summer / Fall /
+  Winter, current season marked "now"), a one-time season-change greeting
+  that offers to carry unfinished wishes into the new season, and
+  season-aware suggestion chips.
+- **Long-term bucket list** for the big dreams.
+- **Shared calendar** with upcoming plans, past plans, and tap-for-details
+  pop-outs on every event.
+- **Idea collections** for dates, dinners, recipes, crafts, and places to
+  try, each with an add form and tap-to-add suggestion chips.
+- **Pick for tonight** — a random picker across open date, dinner, and
+  places ideas.
+- **Dinner tonight?** — one person suggests a dinner; the other can
+  accept it, decline it, or counter with something else. Counters show
+  "Instead of: …", accepted dinners get an "It's decided" banner, and
+  earlier rounds stay in collapsible history.
+- **Scrapbook** — photos with a caption and date, shown as tilted
+  polaroids with a lightbox.
+- **Backup** — export everything as JSON, or import a backup file (the
+  format matches the prototype's export, so a backup downloaded from the
+  prototype can be imported here).
+
+This is a production port of a prototype that lived in a workshop with no
+login. The real version adds Supabase Auth (email + password) and a shared
+Supabase database so both people can use it from their own phones.
+
+**This app is completely separate from Bark Park Buddies**: its own GitHub
+repo, its own Supabase project, its own database, its own storage bucket,
+and its own Vercel project. Nothing is shared between the two.
+
+## Tech stack
+
+- [Next.js](https://nextjs.org/) 15 (App Router, TypeScript)
+- [Tailwind CSS](https://tailwindcss.com/) 4
+- [Supabase](https://supabase.com/) — Postgres, Auth (email + password),
+  and Storage for scrapbook photos
+
+## Setup — what Andrew needs to do
+
+Do these in order. Nothing below touches Bark Park Buddies.
+
+### 1. Create a NEW Supabase project (separate from Bark Park Buddies)
+
+1. Go to [supabase.com/dashboard](https://supabase.com/dashboard) and
+   click **New project**.
+2. Name it `couples-app` (any name works, this keeps it obvious).
+3. Pick a database password and save it somewhere safe (a password
+   manager). Pick a region near you.
+4. Wait for the project to finish provisioning (about a minute).
+
+Do **not** reuse the Bark Park Buddies project. This app gets its own
+database, its own keys, and its own storage bucket.
+
+### 2. Run the migration SQL in the new project
+
+1. In the new project's dashboard, open the **SQL Editor** (left sidebar).
+2. Click **New query**.
+3. Open `supabase/migrations/0001_couples_app.sql` in this repo, copy the
+   whole file, and paste it into the query editor.
+4. Click **Run**. It creates the `items`, `events`, `dinner_proposals`,
+   and `memories` tables, enables Row Level Security, and creates the
+   `scrapbook-photos` storage bucket with its policies.
+
+You can re-run the file safely — it uses `create table if not exists` and
+drops policies before recreating them.
+
+### 3. Copy the API keys
+
+In the new project's dashboard, go to **Project Settings → API** and copy:
+
+- **Project URL** → `NEXT_PUBLIC_SUPABASE_URL`
+- **anon `public` key** → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+
+Use the **anon** key, not the `service_role` key. The service-role key
+bypasses Row Level Security and must never be put in a frontend app.
+
+### 4. Create the two user accounts
+
+1. In the new project's dashboard, go to **Authentication → Users**.
+2. Click **Add user → Create new user**.
+3. Enter Andrew's email and a password, and check **Auto Confirm User**
+   (so no confirmation email is needed), then click **Create user**.
+4. Repeat for Juliette's email and password.
+
+Both accounts sign in to the same shared app and see the same data.
+There is no separate "couple" to configure — sharing is by design (see
+"How sharing works" below).
+
+### 5. Deploy to Vercel as a NEW project
+
+1. Go to [vercel.com](https://vercel.com) and click **Add New → Project**.
+2. Import this GitHub repository (`Moonc8ke/couples-app`).
+3. Before deploying, add the two environment variables (under
+   **Environment Variables**):
+   - `NEXT_PUBLIC_SUPABASE_URL` — the Project URL from step 3
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` — the anon key from step 3
+4. Click **Deploy**.
+
+When it finishes, Vercel gives the app a web address (something like
+`couples-app.vercel.app`). Open it on both phones, sign in with the two
+accounts from step 4, and you're in. Add it to your home screens so it
+feels like an app.
+
+Do **not** add it to the Bark Park Buddies Vercel project — this is a
+separate Vercel project with its own address and its own env vars.
+
+### 6. (Optional) Import the prototype's data
+
+If you have a backup file from the prototype (`couples-app-backup.json`,
+downloaded with its "Back up everything" button):
+
+1. Sign in to the new app.
+2. On the home page, click **Import a backup** and choose the file.
+3. It adds the items, calendar plans, and dinner suggestions, and
+   re-links dinner counters to the new rows. It reports how many rows
+   were added and how many were skipped.
+
+One honest limitation: **scrapbook photos are not in backup files** —
+the prototype's export only carries each memory's caption and date, not
+the photo itself. Imported memories come in as caption-only entries
+(shown with a placeholder tile). Re-add the photos from your phones if
+you want them back in the scrapbook.
+
+## How sharing works
+
+- **Auth:** Supabase Auth with email + password. The app has a sign-in
+  page; unauthenticated visitors are redirected to it.
+- **Sharing model:** Row Level Security is enabled on every table, with a
+  single policy per table: any signed-in user can read and write every
+  row. This is a deliberate choice for a two-person family app — Andrew
+  and Juliette share everything on purpose, and there is no per-user
+  ownership. If the app ever grows beyond the two of them, add an
+  `owner_id` column and tighten the policies before inviting anyone else.
+- **Photos:** Scrapbook photos live in the `scrapbook-photos` storage
+  bucket (public for viewing, so they render with a plain `<img>` tag;
+  only signed-in users can upload or delete). Photo URLs include a
+  timestamp and random suffix, but anyone who has a URL can view that
+  photo — don't share photo links outside the two of you.
+- **Season greeting:** When the calendar season changes, the app shows a
+  one-time "Welcome to Winter!" style greeting and offers to carry
+  unfinished wishes from last season into the new one. Which season was
+  last seen is stored in each browser's localStorage, so each phone gets
+  its own greeting.
+
+## Local development
+
+```bash
+cp .env.example .env.local   # fill in your Supabase URL + anon key
+npm install
+npm run dev                  # http://localhost:3000
+```
+
+`npm run build` verifies the production build. It needs the two
+`NEXT_PUBLIC_SUPABASE_*` variables set (placeholder values are fine for a
+build check — the app only reads them at runtime).
+
+## Project structure
+
+```
+src/
+  app/
+    layout.tsx            Root layout + metadata
+    page.tsx              Home (requires sign-in, renders the app)
+    globals.css           Warm paper theme (ported from the prototype)
+    login/page.tsx        Email + password sign-in
+    auth/callback/route.ts  Supabase email-confirmation return trip
+  components/
+    CouplesApp.tsx        Views (home / add / scrapbook), season greeting,
+                          coming-up list, seasonal panel, pick for tonight,
+                          scrapbook tile, backup export/import
+    items.tsx             Bucket-list + idea sections, item cards with
+                          detail pop-outs, add forms, suggestion chips
+    calendar.tsx          Shared calendar, event cards with detail pop-outs
+    dinner.tsx            "Dinner tonight?" suggest / accept / decline /
+                          counter flow
+    scrapbook.tsx         Polaroid grid, photo upload, lightbox
+    shared.tsx            Section panels, headers, dialog shell
+  lib/
+    supabase/             Browser, server, and middleware Supabase clients
+    data.ts               All Supabase reads/writes, photo upload,
+                          backup export/import
+    seasons.ts            Season math, date formatting
+    suggestions.ts        Category metadata + suggestion chips
+    types.ts              Shared types + backup file format
+supabase/
+  migrations/
+    0001_couples_app.sql  Tables, RLS policies, storage bucket + policies
+```
+
+## Troubleshooting
+
+- **"Invalid login credentials"**: the email or password doesn't match
+  an account. Check that both accounts were created in the *new*
+  project (step 4) and that **Auto Confirm User** was checked. Users
+  created without auto-confirm can't sign in until they confirm via the
+  email link.
+- **Sign-in works but lists are empty**: the migration may not have run
+  in this project, or the app is pointed at a different Supabase project
+  than the one where you ran it. Check the env vars in Vercel match the
+  new project, then redeploy.
+- **Photo upload fails**: check the `scrapbook-photos` bucket exists in
+  the new project's **Storage** section (the migration creates it). If it
+  is missing, re-run the migration SQL.
+- **"Failed to fetch" / network errors**: usually the env vars. The app
+  reads `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+  at build time on Vercel — if you add or change them after a deploy,
+  redeploy so the new values take effect.
+- **Data from the prototype didn't appear after import**: the import
+  reports how many rows it added and skipped. Rows are skipped when a
+  title is missing or a category/season value isn't recognized — check
+  the backup file is the JSON downloaded from the prototype, not a
+  screenshot or a renamed file.
