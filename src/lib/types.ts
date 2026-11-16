@@ -11,6 +11,15 @@ export type Category =
 
 export type Person = "Andrew" | "Juliette";
 
+/** One row per signed-in account, saying which of the two people it is.
+ * The app reads this on sign-in so the dinner and cravings forms already
+ * know who is typing. */
+export interface Profile {
+  id: string;
+  display_name: Person;
+  created_at: string;
+}
+
 export type ItemStatus = "idea" | "done";
 
 export interface Item {

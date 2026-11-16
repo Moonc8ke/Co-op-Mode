@@ -6,12 +6,14 @@ import {
   buildBackup,
   carryOverItems,
   downloadBackup,
+  getMyProfile,
   importBackup,
   listCravings,
   listDinnerProposals,
   listEvents,
   listItems,
   listMemories,
+  setMyProfile,
   type ImportResult,
 } from "@/lib/data";
 import { CATEGORY_META } from "@/lib/suggestions";
@@ -29,12 +31,14 @@ import type {
   DinnerProposal,
   Item,
   Memory,
+  Person,
   Season,
 } from "@/lib/types";
 import { CategorySection, ItemCard } from "./items";
 import { CalendarSection, EventCard } from "./calendar";
 import { CravingsSection } from "./cravings";
 import { DinnerDecisionsSection } from "./dinner";
+import { IdentityPickerModal } from "./identity";
 import { ScrapbookSection } from "./scrapbook";
 import { EmptyNote, SectionHeader, sectionPanelStyle } from "./shared";
 
@@ -52,6 +56,20 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [view, setView] = useState<View>("home");
+
+  // Identity: who is signed in. Read from the profiles table on session
+  // load, so the dinner and cravings forms already know who's typing.
+  // Null until the person has picked a name.
+  const [me, setMe] = useState<Person | null>(null);
+  const [identityModal, setIdentityModal] = useState<"first-run" | null>(
+    null,
+  );
+  const [identitySaving, setIdentitySaving] = useState(false);
+  const [identityError, setIdentityError] = useState("");
+  // The first-run picker is offered once per session; dismissing it
+  // doesn't reopen it on every refresh, the forms show their own
+  // compact chooser instead.
+  const identityPromptedRef = useRef(false);
 
   const load = useCallback(async () => {
     try {
@@ -74,8 +92,49 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
     } finally {
       setLoading(false);
     }
+    // Identity is fetched separately, so a profiles-table problem never
+    // blocks the lists above.
+    try {
+      const profile = await getMyProfile(supabase);
+      if (profile) {
+        setMe(profile.display_name);
+      } else if (!identityPromptedRef.current) {
+        identityPromptedRef.current = true;
+        setIdentityModal("first-run");
+      }
+    } catch {
+      // Most likely the profiles table doesn't exist yet (migration 0003
+      // hasn't run). The lists above still work; the picker explains
+      // what to do when saving fails.
+      setMe(null);
+      setIdentityError(
+        "We couldn't load your name yet — if migration 0003 hasn't run in Supabase, run it first, then pick your name.",
+      );
+      if (!identityPromptedRef.current) {
+        identityPromptedRef.current = true;
+        setIdentityModal("first-run");
+      }
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /** Saves a picked name to the signed-in account's profile row. */
+  async function saveIdentity(person: Person) {
+    setIdentitySaving(true);
+    setIdentityError("");
+    try {
+      await setMyProfile(supabase, person);
+      setMe(person);
+      setIdentityModal(null);
+      setIdentityError("");
+    } catch {
+      setIdentityError(
+        "That didn't save. If migration 0003 hasn't run in Supabase yet, run it first, then try again.",
+      );
+    } finally {
+      setIdentitySaving(false);
+    }
+  }
 
   useEffect(() => {
     void load();
@@ -384,10 +443,23 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
                 (i) => i.category === "dinner" && i.status === "idea",
               )}
               refresh={load}
+              me={me}
+              onPickIdentity={(person) => void saveIdentity(person)}
+              onNeedIdentity={() => setIdentityModal("first-run")}
+              identitySaving={identitySaving}
+              identityError={identityError}
             />
 
             {/* Cravings: post a hankering, the other can surprise you. */}
-            <CravingsSection cravings={cravings} refresh={load} />
+            <CravingsSection
+              cravings={cravings}
+              refresh={load}
+              me={me}
+              onPickIdentity={(person) => void saveIdentity(person)}
+              onNeedIdentity={() => setIdentityModal("first-run")}
+              identitySaving={identitySaving}
+              identityError={identityError}
+            />
 
             {/* Seasonal bucket list: browse any season, current one first. */}
             <section
@@ -675,8 +747,22 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
               )}
               compact
               refresh={load}
+              me={me}
+              onPickIdentity={(person) => void saveIdentity(person)}
+              onNeedIdentity={() => setIdentityModal("first-run")}
+              identitySaving={identitySaving}
+              identityError={identityError}
             />
-            <CravingsSection cravings={cravings} compact refresh={load} />
+            <CravingsSection
+              cravings={cravings}
+              compact
+              refresh={load}
+              me={me}
+              onPickIdentity={(person) => void saveIdentity(person)}
+              onNeedIdentity={() => setIdentityModal("first-run")}
+              identitySaving={identitySaving}
+              identityError={identityError}
+            />
             <CategorySection category="dinner" items={items} refresh={load} />
             <CategorySection category="recipe" items={items} refresh={load} />
             <CategorySection category="craft" items={items} refresh={load} />
@@ -722,6 +808,18 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
           Made for two. Everything you add is saved here, ready for the next
           “what should we do?”
         </footer>
+
+        {/* Who are you? — one-time picker the first time someone signs
+            in. The name is saved on their account; after that the
+            dinner and cravings forms post as them silently. */}
+        {identityModal && (
+          <IdentityPickerModal
+            saving={identitySaving}
+            error={identityError}
+            onPick={(person) => void saveIdentity(person)}
+            onDismiss={() => setIdentityModal(null)}
+          />
+        )}
       </main>
     </div>
   );

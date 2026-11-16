@@ -10,6 +10,7 @@ import {
 } from "@/lib/data";
 import { fmtWhen, otherPerson } from "@/lib/seasons";
 import type { DinnerProposal, Item, Person } from "@/lib/types";
+import { IdentityMiniPicker } from "./identity";
 import { EmptyNote, SectionHeader, sectionPanelStyle } from "./shared";
 
 export function DinnerDecisionsSection({
@@ -17,11 +18,24 @@ export function DinnerDecisionsSection({
   dinnerIdeas,
   compact,
   refresh,
+  me,
+  onPickIdentity,
+  onNeedIdentity,
+  identitySaving,
+  identityError,
 }: {
   proposals: DinnerProposal[];
   dinnerIdeas: Item[];
   compact?: boolean;
   refresh: () => void;
+  /** Who is signed in (null until they have picked a name). */
+  me: Person | null;
+  /** Save a name picked in the inline mini-picker. */
+  onPickIdentity: (person: Person) => void;
+  /** Open the first-run picker (when an action needs an identity). */
+  onNeedIdentity: () => void;
+  identitySaving: boolean;
+  identityError: string;
 }) {
   const supabase = createClient();
   const pending = proposals.filter((p) => p.status === "pending");
@@ -31,7 +45,6 @@ export function DinnerDecisionsSection({
   );
   const latestAccepted = accepted[0] ?? null;
 
-  const [suggestedBy, setSuggestedBy] = useState<Person>("Andrew");
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
   const [pendingSubmit, setPendingSubmit] = useState(false);
@@ -39,14 +52,14 @@ export function DinnerDecisionsSection({
 
   async function onPropose(e: FormEvent) {
     e.preventDefault();
-    if (!title.trim() || pendingSubmit) return;
+    if (!title.trim() || pendingSubmit || !me) return;
     setPendingSubmit(true);
     setError("");
     try {
       await proposeDinner(supabase, {
         title: title.trim(),
         notes: notes.trim(),
-        suggested_by: suggestedBy,
+        suggested_by: me,
       });
       setTitle("");
       setNotes("");
@@ -111,6 +124,8 @@ export function DinnerDecisionsSection({
               proposal={p}
               allProposals={proposals}
               refresh={refresh}
+              me={me}
+              onNeedIdentity={onNeedIdentity}
             />
           ))}
         </ul>
@@ -120,96 +135,77 @@ export function DinnerDecisionsSection({
         )
       )}
 
-      {/* Suggest a dinner */}
-      <form
-        onSubmit={onPropose}
-        className="mt-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-3"
-      >
-        <p className="text-sm font-semibold">Suggest a dinner</p>
-        <div
-          className="mt-2 flex items-center gap-2"
-          role="group"
-          aria-label="Who is suggesting dinner"
-        >
-          <span className="text-sm text-[var(--dim)]">I&apos;m</span>
-          {(["Andrew", "Juliette"] as Person[]).map((person) => (
-            <button
-              key={person}
-              type="button"
-              aria-pressed={suggestedBy === person}
-              aria-label={`Suggest as ${person}`}
-              onClick={() => setSuggestedBy(person)}
-              className={`rounded-full px-3.5 py-1.5 text-sm font-semibold ${
-                suggestedBy === person
-                  ? "text-white shadow-sm"
-                  : "border border-[var(--border)] bg-[var(--bg)]"
-              }`}
-              style={
-                suggestedBy === person
-                  ? { background: "var(--gold)" }
-                  : undefined
-              }
-            >
-              {person}
-            </button>
-          ))}
-          <span className="text-sm text-[var(--dim)]">
-            → {otherPerson(suggestedBy)} decides
-          </span>
-        </div>
-        <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-          <input
-            aria-label="Dinner idea to suggest"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="What are you thinking? Tacos, that chili, takeout…"
-            className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-base"
+      {/* Suggest a dinner — posted as whoever is signed in. */}
+      {me === null ? (
+        <div className="mt-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-3">
+          <p className="text-sm font-semibold">Suggest a dinner</p>
+          <IdentityMiniPicker
+            saving={identitySaving}
+            error={identityError}
+            onPick={onPickIdentity}
+            accent="var(--gold)"
           />
-          <button
-            type="submit"
-            disabled={!title.trim() || pendingSubmit}
-            className="rounded-full bg-[var(--gold)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
-          >
-            {pendingSubmit ? "Sending…" : "Suggest dinner →"}
-          </button>
         </div>
-        <input
-          aria-label="Notes for this dinner suggestion (optional)"
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="Notes (optional) — we have the ingredients, 30 mins, cozy night in…"
-          className="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm"
-        />
-        {dinnerIdeas.length > 0 && (
-          <div className="mt-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--dim)]">
-              Or pick from your dinner ideas
-            </p>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {dinnerIdeas.slice(0, 6).map((idea) => (
-                <button
-                  key={idea.id}
-                  type="button"
-                  aria-label={`Suggest dinner idea: ${idea.title}`}
-                  onClick={() => {
-                    setTitle(idea.title);
-                    if (idea.notes) setNotes(idea.notes);
-                  }}
-                  className="rounded-full border px-3 py-1.5 text-sm font-medium"
-                  style={{
-                    background: "var(--surface)",
-                    borderColor: "var(--gold)",
-                    color: "var(--gold)",
-                  }}
-                >
-                  {idea.title}
-                </button>
-              ))}
-            </div>
+      ) : (
+        <form
+          onSubmit={onPropose}
+          className="mt-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-3"
+        >
+          <p className="text-sm font-semibold">Suggest a dinner</p>
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+            <input
+              aria-label="Dinner idea to suggest"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="What are you thinking? Tacos, that chili, takeout…"
+              className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-base"
+            />
+            <button
+              type="submit"
+              disabled={!title.trim() || pendingSubmit}
+              className="rounded-full bg-[var(--gold)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
+            >
+              {pendingSubmit ? "Sending…" : "Suggest dinner →"}
+            </button>
           </div>
-        )}
-        {error && <p className="mt-2 text-sm text-[var(--rose)]">{error}</p>}
-      </form>
+          <input
+            aria-label="Notes for this dinner suggestion (optional)"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Notes (optional) — we have the ingredients, 30 mins, cozy night in…"
+            className="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm"
+          />
+          {dinnerIdeas.length > 0 && (
+            <div className="mt-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--dim)]">
+                Or pick from your dinner ideas
+              </p>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {dinnerIdeas.slice(0, 6).map((idea) => (
+                  <button
+                    key={idea.id}
+                    type="button"
+                    aria-label={`Suggest dinner idea: ${idea.title}`}
+                    onClick={() => {
+                      setTitle(idea.title);
+                      if (idea.notes) setNotes(idea.notes);
+                    }}
+                    className="rounded-full border px-3 py-1.5 text-sm font-medium"
+                    style={{
+                      background: "var(--surface)",
+                      borderColor: "var(--gold)",
+                      color: "var(--gold)",
+                    }}
+                  >
+                    {idea.title}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {error && <p className="mt-2 text-sm text-[var(--rose)]">{error}</p>}
+        </form>
+      )}
 
       {accepted.length > 0 &&
         !(pending.length === 0 && accepted.length === 1) && (
@@ -224,6 +220,8 @@ export function DinnerDecisionsSection({
                   proposal={p}
                   allProposals={proposals}
                   refresh={refresh}
+                  me={me}
+                  onNeedIdentity={onNeedIdentity}
                 />
               ))}
             </ul>
@@ -242,6 +240,8 @@ export function DinnerDecisionsSection({
                 proposal={p}
                 allProposals={proposals}
                 refresh={refresh}
+                me={me}
+                onNeedIdentity={onNeedIdentity}
               />
             ))}
           </ul>
@@ -255,10 +255,16 @@ function DinnerProposalCard({
   proposal,
   allProposals,
   refresh,
+  me,
+  onNeedIdentity,
 }: {
   proposal: DinnerProposal;
   allProposals: DinnerProposal[];
   refresh: () => void;
+  /** Who is signed in (null until they have picked a name). */
+  me: Person | null;
+  /** Open the first-run picker (when an action needs an identity). */
+  onNeedIdentity: () => void;
 }) {
   const supabase = createClient();
   const responder = otherPerson(proposal.suggested_by);
@@ -275,10 +281,14 @@ function DinnerProposalCard({
   const [error, setError] = useState("");
 
   async function respond(response: "accepted" | "declined") {
+    if (!me) {
+      onNeedIdentity();
+      return;
+    }
     setBusy(true);
     setError("");
     try {
-      await respondToDinnerProposal(supabase, proposal.id, response);
+      await respondToDinnerProposal(supabase, proposal.id, response, me);
       refresh();
     } catch {
       setError("That didn't save. Please try again.");
@@ -290,13 +300,22 @@ function DinnerProposalCard({
   async function onCounter(e: FormEvent) {
     e.preventDefault();
     if (!counterTitle.trim() || busy) return;
+    if (!me) {
+      onNeedIdentity();
+      return;
+    }
     setBusy(true);
     setError("");
     try {
-      await counterDinnerProposal(supabase, proposal.id, {
-        title: counterTitle.trim(),
-        notes: counterNotes.trim(),
-      });
+      await counterDinnerProposal(
+        supabase,
+        proposal.id,
+        {
+          title: counterTitle.trim(),
+          notes: counterNotes.trim(),
+        },
+        me,
+      );
       setShowCounter(false);
       setCounterTitle("");
       setCounterNotes("");

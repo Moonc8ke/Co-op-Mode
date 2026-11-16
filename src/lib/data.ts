@@ -10,6 +10,7 @@ import type {
   ItemStatus,
   Memory,
   Person,
+  Profile,
   Season,
 } from "./types";
 
@@ -17,6 +18,44 @@ export const SCRAPBOOK_BUCKET = "scrapbook-photos";
 
 const isValidDate = (s: unknown): s is string =>
   typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
+
+/* ---------------- Profile (who is signed in) ---------------- */
+
+/** Reads the signed-in account's profile row, or null when they have not
+ * picked a name yet. Throws when the profiles table is missing (run
+ * migration 0003) or the request fails. */
+export async function getMyProfile(
+  supabase: SupabaseClient,
+): Promise<Profile | null> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (error) throw error;
+  return data as Profile | null;
+}
+
+/** Saves (or changes) the signed-in account's name. Upserts by the
+ * auth user id, so switching names later just overwrites the one row. */
+export async function setMyProfile(
+  supabase: SupabaseClient,
+  displayName: Person,
+): Promise<void> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("You need to be signed in.");
+  const { error } = await supabase.from("profiles").upsert({
+    id: user.id,
+    display_name: displayName,
+  });
+  if (error) throw error;
+}
 
 /* ---------------- Reads ---------------- */
 
@@ -214,52 +253,58 @@ export async function proposeDinner(
   return data.id as number;
 }
 
+/** Records the logged-in person's reply to a pending suggestion.
+ * `me` is who is answering (the app knows this from their profile);
+ * the other person is the one who suggested it. */
 export async function respondToDinnerProposal(
   supabase: SupabaseClient,
   id: number,
   response: "accepted" | "declined",
+  me: Person,
 ): Promise<void> {
   const { data, error } = await supabase
     .from("dinner_proposals")
-    .select("suggested_by, status")
+    .select("status")
     .eq("id", id)
     .single();
   if (error) throw error;
   if (data.status !== "pending") {
     throw new Error("That suggestion is no longer waiting for a reply.");
   }
-  const other: Person = data.suggested_by === "Andrew" ? "Juliette" : "Andrew";
   const { error: updateError } = await supabase
     .from("dinner_proposals")
     .update({
       status: response,
-      responded_by: other,
+      responded_by: me,
       responded_at: new Date().toISOString(),
     })
     .eq("id", id);
   if (updateError) throw updateError;
 }
 
+/** Counters a pending suggestion with a new one from the logged-in
+ * person. The original is marked countered, answered by the same
+ * person. */
 export async function counterDinnerProposal(
   supabase: SupabaseClient,
   id: number,
   args: { title: string; notes?: string },
+  me: Person,
 ): Promise<number> {
   const { data, error } = await supabase
     .from("dinner_proposals")
-    .select("suggested_by, status")
+    .select("status")
     .eq("id", id)
     .single();
   if (error) throw error;
   if (data.status !== "pending") {
     throw new Error("That suggestion is no longer waiting for a reply.");
   }
-  const other: Person = data.suggested_by === "Andrew" ? "Juliette" : "Andrew";
   const { error: updateError } = await supabase
     .from("dinner_proposals")
     .update({
       status: "countered",
-      responded_by: other,
+      responded_by: me,
       responded_at: new Date().toISOString(),
     })
     .eq("id", id);
@@ -267,7 +312,7 @@ export async function counterDinnerProposal(
   return proposeDinner(supabase, {
     title: args.title,
     notes: args.notes,
-    suggested_by: other,
+    suggested_by: me,
   }).then(async (newId) => {
     const { error: linkError } = await supabase
       .from("dinner_proposals")

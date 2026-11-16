@@ -22,6 +22,12 @@ a couple plans and remembers together:
   for Y" (food, an item, anything), with an optional note. The other
   can mark it "Got it", recording who fulfilled it and where they found
   it. Fulfilled cravings move to a collapsible history.
+- **It knows who you are** — each account picks a name once ("Who are
+  you?"), saved on that account, so the dinner and cravings forms
+  already know who's typing. No more "I'm Andrew / I'm Juliette" toggle
+  on every post, and no identity UI on the forms at all — the name
+  shows up on the posted item instead ("Andrew suggested…",
+  "Juliette is craving…").
 - **Scrapbook** — photos with a caption and date, shown as tilted
   polaroids with a lightbox.
 - **Backup** — export everything as JSON, or import a backup file (the
@@ -71,8 +77,13 @@ database, its own keys, and its own storage bucket.
 5. Repeat with `supabase/migrations/0002_cravings.sql` in a new query.
    It adds the `cravings` table (the Cravings board) with the same
    Row Level Security pattern. Run 0002 only after 0001.
+6. Repeat with `supabase/migrations/0003_profiles.sql` in a new query.
+   It adds the `profiles` table (one row per account, saying which of
+   the two people it is) with the same Row Level Security pattern. Run
+   0003 only after 0002. The dinner and cravings forms won't know
+   who's typing until this has run.
 
-You can re-run either file safely — they use `create table if not exists`
+You can re-run any file safely — they use `create table if not exists`
 and drop policies before recreating them.
 
 ### 3. Copy the API keys
@@ -96,6 +107,12 @@ bypasses Row Level Security and must never be put in a frontend app.
 Both accounts sign in to the same shared app and see the same data.
 There is no separate "couple" to configure — sharing is by design (see
 "How sharing works" below).
+
+The first time each of you signs in, the app asks "Who are you?" once.
+Pick your name and it is saved on your account — after that, dinner
+suggestions, counters, and cravings are posted as you automatically,
+with no identity questions on the forms. Your name shows on the things
+you post, so the other can see who suggested what.
 
 ### 5. Deploy to Vercel as a NEW project
 
@@ -142,6 +159,14 @@ you want them back in the scrapbook.
   and Juliette share everything on purpose, and there is no per-user
   ownership. If the app ever grows beyond the two of them, add an
   `owner_id` column and tighten the policies before inviting anyone else.
+- **Who's who:** The `profiles` table (migration 0003) holds one row per
+  account with a `display_name` of Andrew or Juliette. The app reads it
+  on sign-in; dinner suggestions and cravings are posted as that person,
+  and accept/decline/counter/"Got it" are recorded as that person too.
+  Older dinner and craving rows keep the names they were saved with.
+  Nothing stops both accounts picking the same name — if that happens,
+  one of you can fix it by deleting that row from the `profiles` table
+  in Supabase (Table Editor) and picking again on the next sign-in.
 - **Photos:** Scrapbook photos live in the `scrapbook-photos` storage
   bucket (public for viewing, so they render with a plain `<img>` tag;
   only signed-in users can upload or delete). Photo URLs include a
@@ -186,6 +211,8 @@ src/
                           counter flow
     cravings.tsx          Cravings board: post a craving or a wish, mark
                           it "Got it" with who fulfilled it and where
+    identity.tsx          "Who are you?" picker and the compact
+                          in-form name chooser
     scrapbook.tsx         Polaroid grid, photo upload, lightbox
     shared.tsx            Section panels, headers, dialog shell
   lib/
@@ -199,6 +226,7 @@ supabase/
   migrations/
     0001_couples_app.sql  Tables, RLS policies, storage bucket + policies
     0002_cravings.sql     Cravings table + RLS (run after 0001)
+    0003_profiles.sql     Profiles table + RLS (run after 0002)
 ```
 
 ## Troubleshooting
@@ -216,6 +244,13 @@ supabase/
   migration 0002, which runs separately from 0001. Run
   `supabase/migrations/0002_cravings.sql` in the project's SQL Editor
   (after 0001) and reload the app.
+- **"Who are you?" won't save, or the forms don't know who you are**:
+  the `profiles` table comes from migration 0003, which runs
+  separately from 0001 and 0002. Run
+  `supabase/migrations/0003_profiles.sql` in the project's SQL Editor
+  (after 0002) and reload the app. Until it runs, the picker says so
+  when you try to save, and the dinner and cravings forms show a
+  compact "Who's posting?" chooser instead.
 - **Photo upload fails**: check the `scrapbook-photos` bucket exists in
   the new project's **Storage** section (the migration creates it). If it
   is missing, re-run the migration SQL.

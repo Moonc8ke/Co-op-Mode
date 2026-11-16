@@ -7,24 +7,37 @@ import {
   deleteCraving,
   fulfillCraving,
 } from "@/lib/data";
-import { fmtWhen, otherPerson } from "@/lib/seasons";
+import { fmtWhen } from "@/lib/seasons";
 import type { Craving, CravingKind, Person } from "@/lib/types";
+import { IdentityMiniPicker } from "./identity";
 import { EmptyNote, SectionHeader, sectionPanelStyle } from "./shared";
 
 export function CravingsSection({
   cravings,
   compact,
   refresh,
+  me,
+  onPickIdentity,
+  onNeedIdentity,
+  identitySaving,
+  identityError,
 }: {
   cravings: Craving[];
   compact?: boolean;
   refresh: () => void;
+  /** Who is signed in (null until they have picked a name). */
+  me: Person | null;
+  /** Save a name picked in the inline mini-picker. */
+  onPickIdentity: (person: Person) => void;
+  /** Open the first-run picker (when an action needs an identity). */
+  onNeedIdentity: () => void;
+  identitySaving: boolean;
+  identityError: string;
 }) {
   const supabase = createClient();
   const open = cravings.filter((c) => c.status === "open");
   const fulfilled = cravings.filter((c) => c.status === "fulfilled");
 
-  const [wantedBy, setWantedBy] = useState<Person>("Andrew");
   const [kind, setKind] = useState<CravingKind>("craving");
   const [title, setTitle] = useState("");
   const [note, setNote] = useState("");
@@ -33,7 +46,7 @@ export function CravingsSection({
 
   async function onPost(e: FormEvent) {
     e.preventDefault();
-    if (!title.trim() || pendingSubmit) return;
+    if (!title.trim() || pendingSubmit || !me) return;
     setPendingSubmit(true);
     setError("");
     try {
@@ -41,7 +54,7 @@ export function CravingsSection({
         title: title.trim(),
         kind,
         note: note.trim(),
-        wanted_by: wantedBy,
+        wanted_by: me,
       });
       setTitle("");
       setNote("");
@@ -70,104 +83,96 @@ export function CravingsSection({
       {open.length > 0 ? (
         <ul className="mt-3 space-y-3">
           {open.map((c) => (
-            <CravingCard key={c.id} craving={c} refresh={refresh} />
+            <CravingCard
+              key={c.id}
+              craving={c}
+              refresh={refresh}
+              me={me}
+              onNeedIdentity={onNeedIdentity}
+            />
           ))}
         </ul>
       ) : (
         <EmptyNote text="Nothing on the craving board. Post a hankering below and see if the other stumbles across it." />
       )}
 
-      {/* Post a craving */}
-      <form
-        onSubmit={onPost}
-        className="mt-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-3"
-      >
-        <p className="text-sm font-semibold">Post a craving or a wish</p>
-        <div
-          className="mt-2 flex flex-wrap items-center gap-2"
-          role="group"
-          aria-label="Who is craving something"
-        >
-          <span className="text-sm text-[var(--dim)]">I&apos;m</span>
-          {(["Andrew", "Juliette"] as Person[]).map((person) => (
-            <button
-              key={person}
-              type="button"
-              aria-pressed={wantedBy === person}
-              aria-label={`Post as ${person}`}
-              onClick={() => setWantedBy(person)}
-              className={`rounded-full px-3.5 py-1.5 text-sm font-semibold ${
-                wantedBy === person
-                  ? "text-white shadow-sm"
-                  : "border border-[var(--border)] bg-[var(--bg)]"
-              }`}
-              style={
-                wantedBy === person
-                  ? { background: "var(--plum)" }
-                  : undefined
-              }
-            >
-              {person}
-            </button>
-          ))}
-          <span className="text-sm text-[var(--dim)]">and I&apos;m</span>
-          {(["craving", "looking_for"] as CravingKind[]).map((k) => (
-            <button
-              key={k}
-              type="button"
-              aria-pressed={kind === k}
-              aria-label={
-                k === "craving"
-                  ? "This is a craving"
-                  : "This is something I am looking for"
-              }
-              onClick={() => setKind(k)}
-              className={`rounded-full px-3.5 py-1.5 text-sm font-semibold ${
-                kind === k
-                  ? "text-white shadow-sm"
-                  : "border border-[var(--border)] bg-[var(--bg)]"
-              }`}
-              style={
-                kind === k ? { background: "var(--plum)" } : undefined
-              }
-            >
-              {k === "craving" ? "craving" : "looking for"}
-            </button>
-          ))}
-        </div>
-        <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-          <input
-            aria-label={
-              kind === "craving"
-                ? "What are you craving"
-                : "What are you looking for"
-            }
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder={
-              kind === "craving"
-                ? "What are you craving? Ice cream, tacos, that bakery croissant…"
-                : "What are you looking for? A book, a game, that jacket you saw…"
-            }
-            className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-base"
+      {/* Post a craving — posted as whoever is signed in. */}
+      {me === null ? (
+        <div className="mt-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-3">
+          <p className="text-sm font-semibold">Post a craving or a wish</p>
+          <IdentityMiniPicker
+            saving={identitySaving}
+            error={identityError}
+            onPick={onPickIdentity}
+            accent="var(--plum)"
           />
-          <button
-            type="submit"
-            disabled={!title.trim() || pendingSubmit}
-            className="rounded-full bg-[var(--plum)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
-          >
-            {pendingSubmit ? "Posting…" : "Post it →"}
-          </button>
         </div>
-        <input
-          aria-label="Note for this craving (optional)"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="Note (optional) — where you saw it, which brand, the flavour…"
-          className="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm"
-        />
-        {error && <p className="mt-2 text-sm text-[var(--rose)]">{error}</p>}
-      </form>
+      ) : (
+        <form
+          onSubmit={onPost}
+          className="mt-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-3"
+        >
+          <p className="text-sm font-semibold">Post a craving or a wish</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className="text-sm text-[var(--dim)]">I&apos;m</span>
+            {(["craving", "looking_for"] as CravingKind[]).map((k) => (
+              <button
+                key={k}
+                type="button"
+                aria-pressed={kind === k}
+                aria-label={
+                  k === "craving"
+                    ? "This is a craving"
+                    : "This is something I am looking for"
+                }
+                onClick={() => setKind(k)}
+                className={`rounded-full px-3.5 py-1.5 text-sm font-semibold ${
+                  kind === k
+                    ? "text-white shadow-sm"
+                    : "border border-[var(--border)] bg-[var(--bg)]"
+                }`}
+                style={
+                  kind === k ? { background: "var(--plum)" } : undefined
+                }
+              >
+                {k === "craving" ? "craving" : "looking for"}
+              </button>
+            ))}
+          </div>
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+            <input
+              aria-label={
+                kind === "craving"
+                  ? "What are you craving"
+                  : "What are you looking for"
+              }
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder={
+                kind === "craving"
+                  ? "What are you craving? Ice cream, tacos, that bakery croissant…"
+                  : "What are you looking for? A book, a game, that jacket you saw…"
+              }
+              className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-base"
+            />
+            <button
+              type="submit"
+              disabled={!title.trim() || pendingSubmit}
+              className="rounded-full bg-[var(--plum)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
+            >
+              {pendingSubmit ? "Posting…" : "Post it →"}
+            </button>
+          </div>
+          <input
+            aria-label="Note for this craving (optional)"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Note (optional) — where you saw it, which brand, the flavour…"
+            className="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm"
+          />
+          {error && <p className="mt-2 text-sm text-[var(--rose)]">{error}</p>}
+        </form>
+      )}
 
       {fulfilled.length > 0 && (
         <details className="mt-3">
@@ -176,7 +181,13 @@ export function CravingsSection({
           </summary>
           <ul className="mt-2 space-y-2">
             {fulfilled.map((c) => (
-              <CravingCard key={c.id} craving={c} refresh={refresh} />
+              <CravingCard
+                key={c.id}
+                craving={c}
+                refresh={refresh}
+                me={me}
+                onNeedIdentity={onNeedIdentity}
+              />
             ))}
           </ul>
         </details>
@@ -188,16 +199,20 @@ export function CravingsSection({
 function CravingCard({
   craving,
   refresh,
+  me,
+  onNeedIdentity,
 }: {
   craving: Craving;
   refresh: () => void;
+  /** Who is signed in (null until they have picked a name). */
+  me: Person | null;
+  /** Open the first-run picker (when an action needs an identity). */
+  onNeedIdentity: () => void;
 }) {
   const supabase = createClient();
   const isOpen = craving.status === "open";
-  const fulfiller = otherPerson(craving.wanted_by);
 
   const [showFulfill, setShowFulfill] = useState(false);
-  const [fulfilledBy, setFulfilledBy] = useState<Person>(fulfiller);
   const [fulfilledNote, setFulfilledNote] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -206,11 +221,15 @@ function CravingCard({
   async function onFulfill(e: FormEvent) {
     e.preventDefault();
     if (busy) return;
+    if (!me) {
+      onNeedIdentity();
+      return;
+    }
     setBusy(true);
     setError("");
     try {
       await fulfillCraving(supabase, craving.id, {
-        fulfilled_by: fulfilledBy,
+        fulfilled_by: me,
         fulfilled_note: fulfilledNote.trim(),
       });
       setShowFulfill(false);
@@ -281,7 +300,10 @@ function CravingCard({
                 type="button"
                 aria-label={`Mark craving as got it: ${craving.title}`}
                 onClick={() => {
-                  setFulfilledBy(fulfiller);
+                  if (!me) {
+                    onNeedIdentity();
+                    return;
+                  }
                   setShowFulfill(true);
                 }}
                 disabled={busy}
@@ -324,35 +346,9 @@ function CravingCard({
               onSubmit={onFulfill}
               className="mt-2 rounded-xl bg-[var(--bg)] p-3"
             >
-              <p className="text-sm font-medium">Who got it?</p>
-              <div
-                className="mt-2 flex flex-wrap items-center gap-2"
-                role="group"
-                aria-label="Who fulfilled this craving"
-              >
-                <span className="text-sm text-[var(--dim)]">I&apos;m</span>
-                {(["Andrew", "Juliette"] as Person[]).map((person) => (
-                  <button
-                    key={person}
-                    type="button"
-                    aria-pressed={fulfilledBy === person}
-                    aria-label={`Fulfilled by ${person}`}
-                    onClick={() => setFulfilledBy(person)}
-                    className={`rounded-full px-3.5 py-1.5 text-sm font-semibold ${
-                      fulfilledBy === person
-                        ? "text-white shadow-sm"
-                        : "border border-[var(--border)] bg-[var(--surface)]"
-                    }`}
-                    style={
-                      fulfilledBy === person
-                        ? { background: "var(--sage)" }
-                        : undefined
-                    }
-                  >
-                    {person}
-                  </button>
-                ))}
-              </div>
+              <p className="text-sm font-medium">
+                Got it{me ? `, ${me}` : ""}? Add a note if you like.
+              </p>
               <input
                 aria-label="Note about where you found it (optional)"
                 value={fulfilledNote}
