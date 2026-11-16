@@ -7,11 +7,13 @@ a couple plans and remembers together:
   Winter, current season marked "now"), a one-time season-change greeting
   that offers to carry unfinished wishes into the new season, and
   season-aware suggestion chips.
-- **Long-term bucket list** for the big dreams.
+- **Long-term bucket list** for the big dreams, shown on the home page
+  under the seasonal list.
 - **Shared calendar** with upcoming plans, past plans, and tap-for-details
   pop-outs on every event.
 - **Idea collections** for dates, dinners, recipes, crafts, and places to
-  try, each with an add form and tap-to-add suggestion chips.
+  try — all shown on the home page too, with their add forms and
+  tap-to-add suggestion chips on the Add & browse page.
 - **Pick for tonight** — a random picker across open date, dinner, and
   places ideas.
 - **Dinner this week** — one person suggests a dinner for a night this
@@ -209,8 +211,9 @@ src/
     auth/callback/route.ts  Supabase email-confirmation return trip
   components/
     CouplesApp.tsx        Views (home / add / scrapbook), season greeting,
-                          coming-up list, seasonal panel, pick for tonight,
-                          scrapbook tile, backup export/import
+                          coming-up list, seasonal panel, all collections
+                          on home, pick for tonight, scrapbook tile,
+                          backup export/import
     items.tsx             Bucket-list + idea sections, item cards with
                           detail pop-outs, add forms, suggestion chips
     calendar.tsx          Shared calendar, event cards with detail pop-outs

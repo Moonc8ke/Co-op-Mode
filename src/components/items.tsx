@@ -16,10 +16,15 @@ export function CategorySection({
   category,
   items,
   refresh,
+  // On the home page the collections are browse-only: the add form and
+  // suggestion chips stay on the Add & browse page, which is the place
+  // for adding new things.
+  showAdd = true,
 }: {
   category: Category;
   items: Item[];
   refresh: () => void;
+  showAdd?: boolean;
 }) {
   const meta = CATEGORY_META[category];
   const mine = items.filter((i) => i.category === category);
@@ -51,7 +56,13 @@ export function CategorySection({
       ) : (
         <>
           {open.length === 0 && done.length === 0 ? (
-            <EmptyNote text="Nothing here yet. Add your first idea below, or tap a suggestion." />
+            <EmptyNote
+              text={
+                showAdd
+                  ? "Nothing here yet. Add your first idea below, or tap a suggestion."
+                  : "Nothing here yet. Tap “Add new things” to add your first idea."
+              }
+            />
           ) : (
             <ul className="mt-3 space-y-2">
               {open.map((i) => (
@@ -65,8 +76,12 @@ export function CategorySection({
         </>
       )}
 
-      <AddItemForm category={category} refresh={refresh} />
-      <Suggestions category={category} existing={mine} refresh={refresh} />
+      {showAdd && (
+        <>
+          <AddItemForm category={category} refresh={refresh} />
+          <Suggestions category={category} existing={mine} refresh={refresh} />
+        </>
+      )}
     </section>
   );
 }

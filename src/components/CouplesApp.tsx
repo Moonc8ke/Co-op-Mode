@@ -325,8 +325,9 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
                 {season} together {SEASON_EMOJI[season]}
               </h1>
               <p className="mt-2 max-w-md text-base text-[var(--dim)]">
-                Just what&apos;s coming up. Everything else lives behind the
-                add button, for when you&apos;re in the mood to plan.
+                Everything in your book, in one place — what&apos;s coming
+                up, what you&apos;re dreaming of, and what&apos;s decided.
+                Tap “Add new things” when you want to add an idea or plan.
               </p>
               <button
                 type="button"
@@ -549,6 +550,46 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
                 </ul>
               )}
             </section>
+
+            {/* Long-term bucket list, places, and idea collections —
+                now on the home page too, browse-only. Adding new things
+                still happens on the Add & browse page. */}
+            <CategorySection
+              category="longterm"
+              items={items}
+              refresh={load}
+              showAdd={false}
+            />
+            <CategorySection
+              category="places"
+              items={items}
+              refresh={load}
+              showAdd={false}
+            />
+            <CategorySection
+              category="date"
+              items={items}
+              refresh={load}
+              showAdd={false}
+            />
+            <CategorySection
+              category="dinner"
+              items={items}
+              refresh={load}
+              showAdd={false}
+            />
+            <CategorySection
+              category="recipe"
+              items={items}
+              refresh={load}
+              showAdd={false}
+            />
+            <CategorySection
+              category="craft"
+              items={items}
+              refresh={load}
+              showAdd={false}
+            />
 
             {/* Pick for tonight */}
             <section
