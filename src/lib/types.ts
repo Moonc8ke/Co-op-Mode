@@ -53,6 +53,9 @@ export interface DinnerProposal {
   status: ProposalStatus;
   responded_by: Person | null;
   counter_of_id: number | null;
+  /** The night this dinner is for, YYYY-MM-DD. Null for suggestions
+   * saved before dates were added — those show under "No day picked yet". */
+  dinner_date: string | null;
   created_at: string;
   responded_at: string | null;
 }

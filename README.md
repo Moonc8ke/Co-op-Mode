@@ -14,10 +14,12 @@ a couple plans and remembers together:
   try, each with an add form and tap-to-add suggestion chips.
 - **Pick for tonight** — a random picker across open date, dinner, and
   places ideas.
-- **Dinner tonight?** — one person suggests a dinner; the other can
-  accept it, decline it, or counter with something else. Counters show
-  "Instead of: …", accepted dinners get an "It's decided" banner, and
-  earlier rounds stay in collapsible history.
+- **Dinner this week** — one person suggests a dinner for a night this
+  week (pick the day, defaults to today); suggestions lay out by day,
+  soonest first, like the calendar. The other can accept it, decline
+  it, or counter with something else for the same night. Counters show
+  "Instead of: …", an accepted dinner gets an "It's decided" banner for
+  that day, past dinners and earlier rounds stay in collapsible history.
 - **Cravings** — either person posts "I'm craving X" or "I'm looking
   for Y" (food, an item, anything), with an optional note. The other
   can mark it "Got it", recording who fulfilled it and where they found
@@ -82,6 +84,11 @@ database, its own keys, and its own storage bucket.
    the two people it is) with the same Row Level Security pattern. Run
    0003 only after 0002. The dinner and cravings forms won't know
    who's typing until this has run.
+7. Repeat with `supabase/migrations/0004_dinner_dates.sql` in a new
+   query. It adds a `dinner_date` column to the `dinner_proposals`
+   table so dinner suggestions can be laid out by day. Run 0004 only
+   after 0003. Dinner suggestions saved before this change have no
+   date and keep working; they show under "No day picked yet".
 
 You can re-run any file safely — they use `create table if not exists`
 and drop policies before recreating them.
@@ -207,8 +214,8 @@ src/
     items.tsx             Bucket-list + idea sections, item cards with
                           detail pop-outs, add forms, suggestion chips
     calendar.tsx          Shared calendar, event cards with detail pop-outs
-    dinner.tsx            "Dinner tonight?" suggest / accept / decline /
-                          counter flow
+    dinner.tsx            "Dinner this week" suggest / accept / decline /
+                          counter flow, laid out by day
     cravings.tsx          Cravings board: post a craving or a wish, mark
                           it "Got it" with who fulfilled it and where
     identity.tsx          "Who are you?" picker and the compact
@@ -227,6 +234,8 @@ supabase/
     0001_couples_app.sql  Tables, RLS policies, storage bucket + policies
     0002_cravings.sql     Cravings table + RLS (run after 0001)
     0003_profiles.sql     Profiles table + RLS (run after 0002)
+    0004_dinner_dates.sql Dinner date column on dinner_proposals
+                          (run after 0003)
 ```
 
 ## Troubleshooting
@@ -251,6 +260,13 @@ supabase/
   (after 0002) and reload the app. Until it runs, the picker says so
   when you try to save, and the dinner and cravings forms show a
   compact "Who's posting?" chooser instead.
+- **Dinner suggestions won't save, or dates don't show**: the
+  `dinner_date` column comes from migration 0004, which runs
+  separately from 0001–0003. Run
+  `supabase/migrations/0004_dinner_dates.sql` in the project's SQL
+  Editor (after 0003) and reload the app. Until it runs, suggesting a
+  dinner fails (the save needs the new column), while older
+  suggestions still load and show under "No day picked yet".
 - **Photo upload fails**: check the `scrapbook-photos` bucket exists in
   the new project's **Storage** section (the migration creates it). If it
   is missing, re-run the migration SQL.

@@ -84,6 +84,7 @@ export async function listDinnerProposals(
   const { data, error } = await supabase
     .from("dinner_proposals")
     .select("*")
+    .order("dinner_date", { ascending: true, nullsFirst: false })
     .order("id", { ascending: false });
   if (error) throw error;
   return data as DinnerProposal[];
@@ -237,7 +238,13 @@ export async function deleteEvent(
 
 export async function proposeDinner(
   supabase: SupabaseClient,
-  args: { title: string; notes?: string; suggested_by: Person },
+  args: {
+    title: string;
+    notes?: string;
+    suggested_by: Person;
+    /** The night this dinner is for (YYYY-MM-DD), or null for no day. */
+    dinner_date?: string | null;
+  },
 ): Promise<number> {
   const { data, error } = await supabase
     .from("dinner_proposals")
@@ -246,6 +253,7 @@ export async function proposeDinner(
       notes: (args.notes ?? "").trim(),
       suggested_by: args.suggested_by,
       status: "pending",
+      dinner_date: args.dinner_date ?? null,
     })
     .select("id")
     .single();
@@ -284,7 +292,7 @@ export async function respondToDinnerProposal(
 
 /** Counters a pending suggestion with a new one from the logged-in
  * person. The original is marked countered, answered by the same
- * person. */
+ * person. The counter is for the same night as the original. */
 export async function counterDinnerProposal(
   supabase: SupabaseClient,
   id: number,
@@ -293,7 +301,7 @@ export async function counterDinnerProposal(
 ): Promise<number> {
   const { data, error } = await supabase
     .from("dinner_proposals")
-    .select("status")
+    .select("status, dinner_date")
     .eq("id", id)
     .single();
   if (error) throw error;
@@ -313,6 +321,7 @@ export async function counterDinnerProposal(
     title: args.title,
     notes: args.notes,
     suggested_by: me,
+    dinner_date: (data.dinner_date as string | null) ?? null,
   }).then(async (newId) => {
     const { error: linkError } = await supabase
       .from("dinner_proposals")
@@ -646,6 +655,7 @@ export async function importBackup(
             : null,
         responded_at:
           typeof row.responded_at === "string" ? row.responded_at : null,
+        dinner_date: isValidDate(row.dinner_date) ? row.dinner_date : null,
       })
       .select("id")
       .single();

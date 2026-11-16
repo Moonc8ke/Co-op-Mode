@@ -8,7 +8,7 @@ import {
   proposeDinner,
   respondToDinnerProposal,
 } from "@/lib/data";
-import { fmtWhen, otherPerson } from "@/lib/seasons";
+import { fmtDay, fmtWhen, otherPerson, relDay, todayStr } from "@/lib/seasons";
 import type { DinnerProposal, Item, Person } from "@/lib/types";
 import { IdentityMiniPicker } from "./identity";
 import { EmptyNote, SectionHeader, sectionPanelStyle } from "./shared";
@@ -38,14 +38,51 @@ export function DinnerDecisionsSection({
   identityError: string;
 }) {
   const supabase = createClient();
-  const pending = proposals.filter((p) => p.status === "pending");
-  const accepted = proposals.filter((p) => p.status === "accepted");
-  const history = proposals.filter(
+  const today = todayStr();
+  // "This week" means today onward. Suggestions from before dates were
+  // added have no dinner_date and stay visible under "No day picked yet";
+  // suggestions for nights that have already passed move to Past dinners.
+  const current = proposals.filter(
+    (p) => p.dinner_date == null || p.dinner_date >= today,
+  );
+  const past = proposals.filter(
+    (p) => p.dinner_date != null && p.dinner_date < today,
+  );
+  const pending = current.filter((p) => p.status === "pending");
+  const accepted = current.filter((p) => p.status === "accepted");
+  const history = current.filter(
     (p) => p.status === "declined" || p.status === "countered",
   );
-  const latestAccepted = accepted[0] ?? null;
+
+  // Lay the week's suggestions out by day, soonest first, like the
+  // calendar does. Undated suggestions go last.
+  type DayGroup = {
+    key: string;
+    date: string | null;
+    pending: DinnerProposal[];
+    decided: DinnerProposal[];
+  };
+  const groups: DayGroup[] = [];
+  const byKey = new Map<string, DayGroup>();
+  for (const p of [...pending, ...accepted]) {
+    const key = p.dinner_date ?? "undated";
+    let g = byKey.get(key);
+    if (!g) {
+      g = { key, date: p.dinner_date, pending: [], decided: [] };
+      byKey.set(key, g);
+      groups.push(g);
+    }
+    if (p.status === "pending") g.pending.push(p);
+    else g.decided.push(p);
+  }
+  groups.sort((a, b) => {
+    if (a.date == null) return 1;
+    if (b.date == null) return -1;
+    return a.date < b.date ? -1 : a.date > b.date ? 1 : 0;
+  });
 
   const [title, setTitle] = useState("");
+  const [date, setDate] = useState(todayStr());
   const [notes, setNotes] = useState("");
   const [pendingSubmit, setPendingSubmit] = useState(false);
   const [error, setError] = useState("");
@@ -60,6 +97,7 @@ export function DinnerDecisionsSection({
         title: title.trim(),
         notes: notes.trim(),
         suggested_by: me,
+        dinner_date: date || null,
       });
       setTitle("");
       setNotes("");
@@ -73,66 +111,63 @@ export function DinnerDecisionsSection({
 
   return (
     <section
-      aria-label="Dinner decisions"
+      aria-label="Dinner this week"
       className={`${compact ? "mt-8" : "mt-6"} rounded-[1.4rem] border border-[var(--border)] p-4 shadow-sm sm:p-5`}
       style={sectionPanelStyle("var(--gold-soft)")}
     >
       <SectionHeader
         emoji="🍽️"
-        label="Dinner tonight?"
-        blurb="One of you suggests, the other can say yes, pass, or propose something else instead."
+        label="Dinner this week"
+        blurb="Suggest a dinner for a night this week — the other can say yes, pass, or propose something else instead."
         color="var(--gold)"
         pill={
           pending.length > 0
             ? `${pending.length} waiting for a reply`
-            : latestAccepted
+            : accepted.length > 0
               ? "Decided ✓"
               : undefined
         }
       />
 
-      {latestAccepted && pending.length === 0 && (
-        <div className="pop-in mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3.5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--sage)]">
-            ✓ It&apos;s decided
-          </p>
-          <p className="font-display mt-1 text-xl font-semibold leading-tight">
-            {latestAccepted.title}
-          </p>
-          {latestAccepted.notes && (
-            <p className="mt-1 text-sm text-[var(--dim)]">
-              {latestAccepted.notes}
+      {groups.length > 0 ? (
+        groups.map((g) => (
+          <div key={g.key} className="mt-4">
+            <p className="text-sm font-semibold">
+              {g.date ? (
+                <>
+                  {fmtDay(g.date)}
+                  {relDay(g.date) ? (
+                    <span className="font-normal text-[var(--dim)]">
+                      {" "}
+                      · {relDay(g.date)}
+                    </span>
+                  ) : null}
+                </>
+              ) : (
+                "No day picked yet"
+              )}
             </p>
-          )}
-          <p className="mt-1.5 text-sm text-[var(--dim)]">
-            {latestAccepted.suggested_by} suggested it
-            {latestAccepted.responded_by
-              ? ` · ${latestAccepted.responded_by} said yes`
-              : ""}
-            {latestAccepted.responded_at
-              ? ` · ${fmtWhen(latestAccepted.responded_at)}`
-              : ""}
-          </p>
-        </div>
-      )}
-
-      {pending.length > 0 ? (
-        <ul className="mt-3 space-y-3">
-          {pending.map((p) => (
-            <DinnerProposalCard
-              key={p.id}
-              proposal={p}
-              allProposals={proposals}
-              refresh={refresh}
-              me={me}
-              onNeedIdentity={onNeedIdentity}
-            />
-          ))}
-        </ul>
+            {g.decided.map((p) => (
+              <DecidedBanner key={p.id} proposal={p} day={g.date} />
+            ))}
+            {g.pending.length > 0 && (
+              <ul className="mt-2 space-y-3">
+                {g.pending.map((p) => (
+                  <DinnerProposalCard
+                    key={p.id}
+                    proposal={p}
+                    allProposals={proposals}
+                    refresh={refresh}
+                    me={me}
+                    onNeedIdentity={onNeedIdentity}
+                  />
+                ))}
+              </ul>
+            )}
+          </div>
+        ))
       ) : (
-        !latestAccepted && (
-          <EmptyNote text="No dinner on the table yet. Suggest something below and let the other decide." />
-        )
+        <EmptyNote text="No dinners on the table this week yet. Suggest something below and let the other decide." />
       )}
 
       {/* Suggest a dinner — posted as whoever is signed in. */}
@@ -159,6 +194,13 @@ export function DinnerDecisionsSection({
               onChange={(e) => setTitle(e.target.value)}
               placeholder="What are you thinking? Tacos, that chili, takeout…"
               className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-base"
+            />
+            <input
+              type="date"
+              aria-label="Night for this dinner"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-base"
             />
             <button
               type="submit"
@@ -207,26 +249,26 @@ export function DinnerDecisionsSection({
         </form>
       )}
 
-      {accepted.length > 0 &&
-        !(pending.length === 0 && accepted.length === 1) && (
-          <details className="mt-3">
-            <summary className="cursor-pointer py-1 text-sm font-medium text-[var(--sage)]">
-              ✓ Decided dinners ({accepted.length})
-            </summary>
-            <ul className="mt-2 space-y-2">
-              {accepted.map((p) => (
-                <DinnerProposalCard
-                  key={p.id}
-                  proposal={p}
-                  allProposals={proposals}
-                  refresh={refresh}
-                  me={me}
-                  onNeedIdentity={onNeedIdentity}
-                />
-              ))}
-            </ul>
-          </details>
-        )}
+      {past.length > 0 && (
+        <details className="mt-3">
+          <summary className="cursor-pointer py-1 text-sm font-medium text-[var(--dim)]">
+            Past dinners ({past.length})
+          </summary>
+          <ul className="mt-2 space-y-2">
+            {[...past].reverse().map((p) => (
+              <DinnerProposalCard
+                key={p.id}
+                proposal={p}
+                allProposals={proposals}
+                refresh={refresh}
+                me={me}
+                onNeedIdentity={onNeedIdentity}
+                showDay
+              />
+            ))}
+          </ul>
+        </details>
+      )}
 
       {history.length > 0 && (
         <details className="mt-3">
@@ -242,6 +284,7 @@ export function DinnerDecisionsSection({
                 refresh={refresh}
                 me={me}
                 onNeedIdentity={onNeedIdentity}
+                showDay
               />
             ))}
           </ul>
@@ -251,12 +294,46 @@ export function DinnerDecisionsSection({
   );
 }
 
+/** The green "It's decided" banner for one night's accepted dinner. */
+function DecidedBanner({
+  proposal,
+  day,
+}: {
+  proposal: DinnerProposal;
+  day: string | null;
+}) {
+  return (
+    <div className="pop-in mt-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3.5">
+      <p className="text-xs font-semibold uppercase tracking-wide text-[var(--sage)]">
+        ✓ It&apos;s decided
+        {day ? ` — ${fmtDay(day)}` : ""}
+      </p>
+      <p className="font-display mt-1 text-xl font-semibold leading-tight">
+        {proposal.title}
+      </p>
+      {proposal.notes && (
+        <p className="mt-1 text-sm text-[var(--dim)]">{proposal.notes}</p>
+      )}
+      <p className="mt-1.5 text-sm text-[var(--dim)]">
+        {proposal.suggested_by} suggested it
+        {proposal.responded_by
+          ? ` · ${proposal.responded_by} said yes`
+          : ""}
+        {proposal.responded_at
+          ? ` · ${fmtWhen(proposal.responded_at)}`
+          : ""}
+      </p>
+    </div>
+  );
+}
+
 function DinnerProposalCard({
   proposal,
   allProposals,
   refresh,
   me,
   onNeedIdentity,
+  showDay,
 }: {
   proposal: DinnerProposal;
   allProposals: DinnerProposal[];
@@ -265,6 +342,8 @@ function DinnerProposalCard({
   me: Person | null;
   /** Open the first-run picker (when an action needs an identity). */
   onNeedIdentity: () => void;
+  /** Show which night this is for (cards outside a day group). */
+  showDay?: boolean;
 }) {
   const supabase = createClient();
   const responder = otherPerson(proposal.suggested_by);
@@ -359,6 +438,11 @@ function DinnerProposalCard({
         )}
         <span className="text-xs text-[var(--dim)]">
           {fmtWhen(proposal.created_at)}
+          {showDay
+            ? proposal.dinner_date
+              ? ` · ${fmtDay(proposal.dinner_date)}`
+              : " · No day picked"
+            : ""}
         </span>
         {!isPending && (
           <span
@@ -424,7 +508,7 @@ function DinnerProposalCard({
                 disabled={busy}
                 className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-sm font-medium disabled:opacity-40"
               >
-                ✕ Not tonight
+                ✕ Not this one
               </button>
               <button
                 type="button"
