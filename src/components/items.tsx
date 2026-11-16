@@ -20,11 +20,18 @@ export function CategorySection({
   // suggestion chips stay on the Add & browse page, which is the place
   // for adding new things.
   showAdd = true,
+  // On the home page each section can be tucked away with the little
+  // arrow in its header. When these aren't given (the Add & browse
+  // page), the section is always open and has no arrow.
+  collapsed,
+  onToggleCollapsed,
 }: {
   category: Category;
   items: Item[];
   refresh: () => void;
   showAdd?: boolean;
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
 }) {
   const meta = CATEGORY_META[category];
   const mine = items.filter((i) => i.category === category);
@@ -49,37 +56,51 @@ export function CategorySection({
         pill={
           mine.length > 0 ? `${done.length}/${mine.length} done` : undefined
         }
+        collapsed={collapsed}
+        onToggle={onToggleCollapsed}
       />
 
-      {category === "seasonal" ? (
-        <SeasonalLists open={open} done={done} refresh={refresh} />
-      ) : (
+      {!collapsed && (
         <>
-          {open.length === 0 && done.length === 0 ? (
-            <EmptyNote
-              text={
-                showAdd
-                  ? "Nothing here yet. Add your first idea below, or tap a suggestion."
-                  : "Nothing here yet. Tap “Add new things” to add your first idea."
-              }
-            />
+          {category === "seasonal" ? (
+            <SeasonalLists open={open} done={done} refresh={refresh} />
           ) : (
-            <ul className="mt-3 space-y-2">
-              {open.map((i) => (
-                <ItemCard key={i.id} item={i} refresh={refresh} />
-              ))}
-            </ul>
+            <>
+              {open.length === 0 && done.length === 0 ? (
+                <EmptyNote
+                  text={
+                    showAdd
+                      ? "Nothing here yet. Add your first idea below, or tap a suggestion."
+                      : "Nothing here yet. Tap “Add new things” to add your first idea."
+                  }
+                />
+              ) : (
+                <ul className="mt-3 space-y-2">
+                  {open.map((i) => (
+                    <ItemCard key={i.id} item={i} refresh={refresh} />
+                  ))}
+                </ul>
+              )}
+              {done.length > 0 && (
+                <DoneGroup
+                  done={done}
+                  label="Done together"
+                  refresh={refresh}
+                />
+              )}
+            </>
           )}
-          {done.length > 0 && (
-            <DoneGroup done={done} label="Done together" refresh={refresh} />
-          )}
-        </>
-      )}
 
-      {showAdd && (
-        <>
-          <AddItemForm category={category} refresh={refresh} />
-          <Suggestions category={category} existing={mine} refresh={refresh} />
+          {showAdd && (
+            <>
+              <AddItemForm category={category} refresh={refresh} />
+              <Suggestions
+                category={category}
+                existing={mine}
+                refresh={refresh}
+              />
+            </>
+          )}
         </>
       )}
     </section>

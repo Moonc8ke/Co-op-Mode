@@ -21,6 +21,11 @@ export function CravingsSection({
   onNeedIdentity,
   identitySaving,
   identityError,
+  // On the home page the section can be tucked away with the little
+  // arrow in its header. When these aren't given (the Add & browse
+  // page), the section is always open and has no arrow.
+  collapsed,
+  onToggleCollapsed,
 }: {
   cravings: Craving[];
   compact?: boolean;
@@ -33,6 +38,8 @@ export function CravingsSection({
   onNeedIdentity: () => void;
   identitySaving: boolean;
   identityError: string;
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
 }) {
   const supabase = createClient();
   const open = cravings.filter((c) => c.status === "open");
@@ -78,8 +85,12 @@ export function CravingsSection({
         blurb="Craving something, or looking for a thing? Post it here so the other can surprise you."
         color="var(--plum)"
         pill={open.length > 0 ? `${open.length} open` : undefined}
+        collapsed={collapsed}
+        onToggle={onToggleCollapsed}
       />
 
+      {!collapsed && (
+        <>
       {open.length > 0 ? (
         <ul className="mt-3 space-y-3">
           {open.map((c) => (
@@ -191,6 +202,8 @@ export function CravingsSection({
             ))}
           </ul>
         </details>
+      )}
+        </>
       )}
     </section>
   );

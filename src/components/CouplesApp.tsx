@@ -40,7 +40,7 @@ import { CravingsSection } from "./cravings";
 import { DinnerDecisionsSection } from "./dinner";
 import { IdentityPickerModal } from "./identity";
 import { ScrapbookSection } from "./scrapbook";
-import { EmptyNote, SectionHeader, sectionPanelStyle } from "./shared";
+import { EmptyNote, SectionHeader, sectionPanelStyle, useCollapsedSections } from "./shared";
 
 type View = "home" | "add" | "scrapbook";
 
@@ -146,6 +146,15 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
   }, [view]);
 
   const season = seasonFor(new Date());
+  // Home-page sections can be tucked away with the little arrow in
+  // their header. The choice is kept in localStorage, so it sticks on
+  // this device. The Add & browse page doesn't pass these props, so its
+  // sections stay as they are.
+  const { isCollapsed, toggle: toggleSection } = useCollapsedSections();
+  const collapseProps = (id: string) => ({
+    collapsed: isCollapsed(id),
+    onToggleCollapsed: () => toggleSection(id),
+  });
   // The seasonal panel can browse any season, not just the current one;
   // it starts on the current season.
   const [viewSeason, setViewSeason] = useState<Season>(season);
@@ -425,15 +434,21 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
                     ? `${upcomingEvents.length} coming up`
                     : undefined
                 }
+                collapsed={isCollapsed("coming-up")}
+                onToggle={() => toggleSection("coming-up")}
               />
-              {upcomingEvents.length === 0 ? (
-                <EmptyNote text="Nothing on the calendar yet. Tap “Add new things” to put your next plan in." />
-              ) : (
-                <ul className="mt-3 space-y-2">
-                  {upcomingEvents.map((e) => (
-                    <EventCard key={e.id} event={e} refresh={load} />
-                  ))}
-                </ul>
+              {!isCollapsed("coming-up") && (
+                <>
+                  {upcomingEvents.length === 0 ? (
+                    <EmptyNote text="Nothing on the calendar yet. Tap “Add new things” to put your next plan in." />
+                  ) : (
+                    <ul className="mt-3 space-y-2">
+                      {upcomingEvents.map((e) => (
+                        <EventCard key={e.id} event={e} refresh={load} />
+                      ))}
+                    </ul>
+                  )}
+                </>
               )}
             </section>
 
@@ -449,6 +464,7 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
               onNeedIdentity={() => setIdentityModal("first-run")}
               identitySaving={identitySaving}
               identityError={identityError}
+              {...collapseProps("dinner-week")}
             />
 
             {/* Cravings: post a hankering, the other can surprise you. */}
@@ -460,6 +476,7 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
               onNeedIdentity={() => setIdentityModal("first-run")}
               identitySaving={identitySaving}
               identityError={identityError}
+              {...collapseProps("cravings")}
             />
 
             {/* Seasonal bucket list: browse any season, current one first. */}
@@ -478,7 +495,11 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
                     ? `${seasonDone}/${seasonItems.length} done`
                     : undefined
                 }
+                collapsed={isCollapsed("seasonal")}
+                onToggle={() => toggleSection("seasonal")}
               />
+              {!isCollapsed("seasonal") && (
+                <>
               <div
                 className="mt-3 flex flex-wrap gap-1.5"
                 role="tablist"
@@ -549,6 +570,8 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
                   ))}
                 </ul>
               )}
+                </>
+              )}
             </section>
 
             {/* Long-term bucket list, places, and idea collections —
@@ -559,36 +582,42 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
               items={items}
               refresh={load}
               showAdd={false}
+              {...collapseProps("collection-longterm")}
             />
             <CategorySection
               category="places"
               items={items}
               refresh={load}
               showAdd={false}
+              {...collapseProps("collection-places")}
             />
             <CategorySection
               category="date"
               items={items}
               refresh={load}
               showAdd={false}
+              {...collapseProps("collection-date")}
             />
             <CategorySection
               category="dinner"
               items={items}
               refresh={load}
               showAdd={false}
+              {...collapseProps("collection-dinner")}
             />
             <CategorySection
               category="recipe"
               items={items}
               refresh={load}
               showAdd={false}
+              {...collapseProps("collection-recipe")}
             />
             <CategorySection
               category="craft"
               items={items}
               refresh={load}
               showAdd={false}
+              {...collapseProps("collection-craft")}
             />
 
             {/* Pick for tonight */}
@@ -669,7 +698,11 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
                     ? `${memories.length} ${memories.length === 1 ? "memory" : "memories"}`
                     : undefined
                 }
+                collapsed={isCollapsed("scrapbook")}
+                onToggle={() => toggleSection("scrapbook")}
               />
+              {!isCollapsed("scrapbook") && (
+                <>
               {memories.length > 0 ? (
                 <div className="mt-3 grid grid-cols-3 gap-2">
                   {memories.slice(0, 3).map((m) => (
@@ -706,6 +739,8 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
                   ? "Open the scrapbook →"
                   : "Start the scrapbook →"}
               </button>
+                </>
+              )}
             </section>
 
             {/* Backup: download everything, or restore from a file. */}

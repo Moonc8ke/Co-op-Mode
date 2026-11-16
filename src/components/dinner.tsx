@@ -23,6 +23,11 @@ export function DinnerDecisionsSection({
   onNeedIdentity,
   identitySaving,
   identityError,
+  // On the home page the section can be tucked away with the little
+  // arrow in its header. When these aren't given (the Add & browse
+  // page), the section is always open and has no arrow.
+  collapsed,
+  onToggleCollapsed,
 }: {
   proposals: DinnerProposal[];
   dinnerIdeas: Item[];
@@ -36,6 +41,8 @@ export function DinnerDecisionsSection({
   onNeedIdentity: () => void;
   identitySaving: boolean;
   identityError: string;
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
 }) {
   const supabase = createClient();
   const today = todayStr();
@@ -127,8 +134,12 @@ export function DinnerDecisionsSection({
               ? "Decided ✓"
               : undefined
         }
+        collapsed={collapsed}
+        onToggle={onToggleCollapsed}
       />
 
+      {!collapsed && (
+        <>
       {groups.length > 0 ? (
         groups.map((g) => (
           <div key={g.key} className="mt-4">
@@ -289,6 +300,8 @@ export function DinnerDecisionsSection({
             ))}
           </ul>
         </details>
+      )}
+        </>
       )}
     </section>
   );

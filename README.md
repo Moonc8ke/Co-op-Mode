@@ -14,6 +14,10 @@ a couple plans and remembers together:
 - **Idea collections** for dates, dinners, recipes, crafts, and places to
   try — all shown on the home page too, with their add forms and
   tap-to-add suggestion chips on the Add & browse page.
+- **Tuck sections away** — every section on the home page has a little
+  arrow in its header; tap the arrow (or the header) to hide that
+  section's contents, tap again to bring them back. The choice is saved
+  on that phone, so it sticks between visits.
 - **Pick for tonight** — a random picker across open date, dinner, and
   places ideas.
 - **Dinner this week** — one person suggests a dinner for a night this
@@ -224,7 +228,8 @@ src/
     identity.tsx          "Who are you?" picker and the compact
                           in-form name chooser
     scrapbook.tsx         Polaroid grid, photo upload, lightbox
-    shared.tsx            Section panels, headers, dialog shell
+    shared.tsx            Section panels, headers, dialog shell, and the
+                          home-section tuck-away state (localStorage)
   lib/
     supabase/             Browser, server, and middleware Supabase clients
     data.ts               All Supabase reads/writes, photo upload,
