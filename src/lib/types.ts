@@ -59,6 +59,23 @@ export interface Memory {
   created_at: string;
 }
 
+export type CravingKind = "craving" | "looking_for";
+
+export type CravingStatus = "open" | "fulfilled";
+
+export interface Craving {
+  id: number;
+  title: string;
+  kind: CravingKind;
+  note: string;
+  wanted_by: Person;
+  status: CravingStatus;
+  fulfilled_by: Person | null;
+  fulfilled_note: string;
+  created_at: string;
+  fulfilled_at: string | null;
+}
+
 /** The JSON backup format. Identical to the prototype's export so a backup
  * downloaded from the prototype can be imported here, and vice versa. */
 export interface BackupPayload {
@@ -66,6 +83,7 @@ export interface BackupPayload {
   items: Item[];
   events: CalEvent[];
   dinner_proposals: DinnerProposal[];
+  cravings: Craving[];
   memories: Array<{
     id: number;
     caption: string;

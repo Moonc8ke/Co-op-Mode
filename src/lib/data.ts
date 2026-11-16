@@ -3,6 +3,8 @@ import type {
   BackupPayload,
   CalEvent,
   Category,
+  Craving,
+  CravingKind,
   DinnerProposal,
   Item,
   ItemStatus,
@@ -77,6 +79,17 @@ export async function listMemories(
   return (data as Record<string, unknown>[]).map((row) =>
     memoryFromRow(supabase, row),
   );
+}
+
+export async function listCravings(
+  supabase: SupabaseClient,
+): Promise<Craving[]> {
+  const { data, error } = await supabase
+    .from("cravings")
+    .select("*")
+    .order("id", { ascending: false });
+  if (error) throw error;
+  return data as Craving[];
 }
 
 /* ---------------- Items ---------------- */
@@ -276,6 +289,69 @@ export async function deleteDinnerProposal(
   if (error) throw error;
 }
 
+/* ---------------- Cravings ---------------- */
+
+export async function addCraving(
+  supabase: SupabaseClient,
+  args: {
+    title: string;
+    kind: CravingKind;
+    note?: string;
+    wanted_by: Person;
+  },
+): Promise<number> {
+  const { data, error } = await supabase
+    .from("cravings")
+    .insert({
+      title: args.title.trim(),
+      kind: args.kind,
+      note: (args.note ?? "").trim(),
+      wanted_by: args.wanted_by,
+      status: "open",
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
+  return data.id as number;
+}
+
+/** Marks an open craving as fulfilled, recording who got it and an
+ * optional note (e.g. where they found it). Throws when the craving is
+ * no longer open. */
+export async function fulfillCraving(
+  supabase: SupabaseClient,
+  id: number,
+  args: { fulfilled_by: Person; fulfilled_note?: string },
+): Promise<void> {
+  const { data, error } = await supabase
+    .from("cravings")
+    .select("status")
+    .eq("id", id)
+    .single();
+  if (error) throw error;
+  if (data.status !== "open") {
+    throw new Error("That craving was already taken care of.");
+  }
+  const { error: updateError } = await supabase
+    .from("cravings")
+    .update({
+      status: "fulfilled",
+      fulfilled_by: args.fulfilled_by,
+      fulfilled_note: (args.fulfilled_note ?? "").trim(),
+      fulfilled_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (updateError) throw updateError;
+}
+
+export async function deleteCraving(
+  supabase: SupabaseClient,
+  id: number,
+): Promise<void> {
+  const { error } = await supabase.from("cravings").delete().eq("id", id);
+  if (error) throw error;
+}
+
 /* ---------------- Scrapbook memories ---------------- */
 
 /** Shrinks big phone photos before upload so they save fast. Same rule as
@@ -369,6 +445,7 @@ export function buildBackup(
   items: Item[],
   events: CalEvent[],
   proposals: DinnerProposal[],
+  cravings: Craving[],
   memories: Memory[],
 ): BackupPayload {
   return {
@@ -376,6 +453,7 @@ export function buildBackup(
     items,
     events,
     dinner_proposals: proposals,
+    cravings,
     memories: memories.map((m) => ({
       id: m.id,
       caption: m.caption,
@@ -400,6 +478,7 @@ export interface ImportResult {
   items: number;
   events: number;
   proposals: number;
+  cravings: number;
   memories: number;
   skipped: number;
 }
@@ -428,6 +507,7 @@ export async function importBackup(
     items: 0,
     events: 0,
     proposals: 0,
+    cravings: 0,
     memories: 0,
     skipped: 0,
   };
@@ -565,6 +645,44 @@ export async function importBackup(
     });
     if (error) result.skipped += 1;
     else result.memories += 1;
+  }
+
+  // Cravings are new in migration 0002, so older backups may not have
+  // them at all — that is fine, nothing is skipped for a missing list.
+  const rawCravings = Array.isArray(raw.cravings) ? raw.cravings : [];
+  for (const r of rawCravings) {
+    const row = r as Record<string, unknown>;
+    if (
+      typeof row.title !== "string" ||
+      !row.title.trim() ||
+      (row.kind !== "craving" && row.kind !== "looking_for") ||
+      (row.wanted_by !== "Andrew" && row.wanted_by !== "Juliette")
+    ) {
+      result.skipped += 1;
+      continue;
+    }
+    const status = row.status === "fulfilled" ? "fulfilled" : "open";
+    const { error } = await supabase.from("cravings").insert({
+      title: row.title.trim().slice(0, 200),
+      kind: row.kind,
+      note: typeof row.note === "string" ? row.note.slice(0, 1000) : "",
+      wanted_by: row.wanted_by,
+      status,
+      fulfilled_by:
+        row.fulfilled_by === "Andrew" || row.fulfilled_by === "Juliette"
+          ? row.fulfilled_by
+          : null,
+      fulfilled_note:
+        typeof row.fulfilled_note === "string"
+          ? row.fulfilled_note.slice(0, 1000)
+          : "",
+      fulfilled_at:
+        status === "fulfilled" && typeof row.fulfilled_at === "string"
+          ? row.fulfilled_at
+          : null,
+    });
+    if (error) result.skipped += 1;
+    else result.cravings += 1;
   }
 
   return result;

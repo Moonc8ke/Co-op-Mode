@@ -7,6 +7,7 @@ import {
   carryOverItems,
   downloadBackup,
   importBackup,
+  listCravings,
   listDinnerProposals,
   listEvents,
   listItems,
@@ -24,6 +25,7 @@ import {
 } from "@/lib/seasons";
 import type {
   CalEvent,
+  Craving,
   DinnerProposal,
   Item,
   Memory,
@@ -31,6 +33,7 @@ import type {
 } from "@/lib/types";
 import { CategorySection, ItemCard } from "./items";
 import { CalendarSection, EventCard } from "./calendar";
+import { CravingsSection } from "./cravings";
 import { DinnerDecisionsSection } from "./dinner";
 import { ScrapbookSection } from "./scrapbook";
 import { EmptyNote, SectionHeader, sectionPanelStyle } from "./shared";
@@ -44,6 +47,7 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
   const [items, setItems] = useState<Item[]>([]);
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [proposals, setProposals] = useState<DinnerProposal[]>([]);
+  const [cravings, setCravings] = useState<Craving[]>([]);
   const [memories, setMemories] = useState<Memory[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -51,16 +55,18 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
 
   const load = useCallback(async () => {
     try {
-      const [itemsData, eventsData, proposalsData, memoriesData] =
+      const [itemsData, eventsData, proposalsData, cravingsData, memoriesData] =
         await Promise.all([
           listItems(supabase),
           listEvents(supabase),
           listDinnerProposals(supabase),
+          listCravings(supabase),
           listMemories(supabase),
         ]);
       setItems(itemsData);
       setEvents(eventsData);
       setProposals(proposalsData);
+      setCravings(cravingsData);
       setMemories(memoriesData);
       setLoadError("");
     } catch {
@@ -175,7 +181,7 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
   }
 
   function exportBackup() {
-    downloadBackup(buildBackup(items, events, proposals, memories));
+    downloadBackup(buildBackup(items, events, proposals, cravings, memories));
   }
 
   // Import a backup file (the prototype's export format, or one from
@@ -379,6 +385,9 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
               )}
               refresh={load}
             />
+
+            {/* Cravings: post a hankering, the other can surprise you. */}
+            <CravingsSection cravings={cravings} refresh={load} />
 
             {/* Seasonal bucket list: browse any season, current one first. */}
             <section
@@ -614,7 +623,8 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
               {importResult && (
                 <p className="mt-2 text-sm text-[var(--dim)]">
                   Imported {importResult.items} ideas, {importResult.events}{" "}
-                  plans, {importResult.proposals} dinner suggestions, and{" "}
+                  plans, {importResult.proposals} dinner suggestions,{" "}
+                  {importResult.cravings} cravings, and{" "}
                   {importResult.memories} memories
                   {importResult.skipped > 0
                     ? ` (${importResult.skipped} rows skipped)`
@@ -666,6 +676,7 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
               compact
               refresh={load}
             />
+            <CravingsSection cravings={cravings} compact refresh={load} />
             <CategorySection category="dinner" items={items} refresh={load} />
             <CategorySection category="recipe" items={items} refresh={load} />
             <CategorySection category="craft" items={items} refresh={load} />

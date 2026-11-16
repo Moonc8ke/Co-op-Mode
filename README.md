@@ -18,6 +18,10 @@ a couple plans and remembers together:
   accept it, decline it, or counter with something else. Counters show
   "Instead of: …", accepted dinners get an "It's decided" banner, and
   earlier rounds stay in collapsible history.
+- **Cravings** — either person posts "I'm craving X" or "I'm looking
+  for Y" (food, an item, anything), with an optional note. The other
+  can mark it "Got it", recording who fulfilled it and where they found
+  it. Fulfilled cravings move to a collapsible history.
 - **Scrapbook** — photos with a caption and date, shown as tilted
   polaroids with a lightbox.
 - **Backup** — export everything as JSON, or import a backup file (the
@@ -64,9 +68,12 @@ database, its own keys, and its own storage bucket.
 4. Click **Run**. It creates the `items`, `events`, `dinner_proposals`,
    and `memories` tables, enables Row Level Security, and creates the
    `scrapbook-photos` storage bucket with its policies.
+5. Repeat with `supabase/migrations/0002_cravings.sql` in a new query.
+   It adds the `cravings` table (the Cravings board) with the same
+   Row Level Security pattern. Run 0002 only after 0001.
 
-You can re-run the file safely — it uses `create table if not exists` and
-drops policies before recreating them.
+You can re-run either file safely — they use `create table if not exists`
+and drop policies before recreating them.
 
 ### 3. Copy the API keys
 
@@ -177,6 +184,8 @@ src/
     calendar.tsx          Shared calendar, event cards with detail pop-outs
     dinner.tsx            "Dinner tonight?" suggest / accept / decline /
                           counter flow
+    cravings.tsx          Cravings board: post a craving or a wish, mark
+                          it "Got it" with who fulfilled it and where
     scrapbook.tsx         Polaroid grid, photo upload, lightbox
     shared.tsx            Section panels, headers, dialog shell
   lib/
@@ -189,6 +198,7 @@ src/
 supabase/
   migrations/
     0001_couples_app.sql  Tables, RLS policies, storage bucket + policies
+    0002_cravings.sql     Cravings table + RLS (run after 0001)
 ```
 
 ## Troubleshooting
@@ -202,6 +212,10 @@ supabase/
   in this project, or the app is pointed at a different Supabase project
   than the one where you ran it. Check the env vars in Vercel match the
   new project, then redeploy.
+- **Cravings won't load or save**: the `cravings` table comes from
+  migration 0002, which runs separately from 0001. Run
+  `supabase/migrations/0002_cravings.sql` in the project's SQL Editor
+  (after 0001) and reload the app.
 - **Photo upload fails**: check the `scrapbook-photos` bucket exists in
   the new project's **Storage** section (the migration creates it). If it
   is missing, re-run the migration SQL.
