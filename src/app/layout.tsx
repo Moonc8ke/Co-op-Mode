@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import Splash from "@/components/Splash";
 
 export const metadata: Metadata = {
   title: "Andrew & Juliette — Our Book",
@@ -33,6 +34,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-[var(--bg)] text-[var(--text)] antialiased">
+        <Splash />
         {children}
       </body>
     </html>
