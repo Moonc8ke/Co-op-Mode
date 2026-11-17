@@ -41,6 +41,11 @@ a couple plans and remembers together:
 - **Backup** — export everything as JSON, or import a backup file (the
   format matches the prototype's export, so a backup downloaded from the
   prototype can be imported here).
+- **Install it like an app** — the app is installable on your phones:
+  add it to the home screen and it shows up with its own icon (a little
+  plum book with a heart) and the name "Co-op Mode", opening full
+  screen like a downloaded app. No app store, no subscription. See
+  "Install it on your phones" below.
 
 This is a production port of a prototype that lived in a workshop with no
 login. The real version adds Supabase Auth (email + password) and a shared
@@ -145,6 +150,32 @@ feels like an app.
 Do **not** add it to the Bark Park Buddies Vercel project — this is a
 separate Vercel project with its own address and its own env vars.
 
+### Install it on your phones
+
+The app is installable, so it can live on your home screens with its own
+icon (a little plum book with a heart) and the name "Co-op Mode",
+opening full screen like a downloaded app. No app store, no subscription.
+
+If you already saved the site to your home screen before this was added,
+that old shortcut won't pick up the new icon or the full-screen
+behaviour on its own — delete it first, then re-add it once:
+
+1. **Delete the old home-screen shortcut** (long-press the icon, remove
+   it). This doesn't delete anything from the app — your lists, plans,
+   and photos live in Supabase, not on the phone.
+2. **Android (Chrome):** open the app's address, tap the three-dot
+   menu → **Add to Home screen** (or tap **Install** if the browser
+   offers it).
+3. **iPhone (Safari):** open the app's address, tap the **Share**
+   button → **Add to Home Screen**.
+
+After this one-time re-add, the app keeps updating itself automatically
+whenever a new version is deployed — it's still the same website
+underneath. It needs internet to load and to sync between your two
+phones, the same as the website does. (There is deliberately no service
+worker: nothing is cached offline, so you never get a stale copy of the
+app and it can't interfere with sign-in.)
+
 ### 6. (Optional) Import the prototype's data
 
 If you have a backup file from the prototype (`couples-app-backup.json`,
@@ -206,6 +237,19 @@ build check — the app only reads them at runtime).
 ## Project structure
 
 ```
+public/
+  manifest.webmanifest  PWA manifest: name "Co-op Mode", standalone,
+                        cream theme, app icons
+  icon.svg              App icon source (text SVG): plum book + heart.
+                        The PNGs below are generated from it at build
+                        time by scripts/generate-icons.mjs (prebuild)
+                        and are not committed.
+  icon-192.png          App icon, 192x192 (generated, gitignored)
+  icon-512.png          App icon, 512x512 (generated, gitignored)
+  icon-maskable-512.png App icon with safe-zone padding (maskable)
+                        (generated, gitignored)
+  apple-touch-icon.png  iPhone home-screen icon, 180x180
+                        (generated, gitignored)
 src/
   app/
     layout.tsx            Root layout + metadata
@@ -287,3 +331,9 @@ supabase/
   title is missing or a category/season value isn't recognized — check
   the backup file is the JSON downloaded from the prototype, not a
   screenshot or a renamed file.
+- **The home-screen icon is still the old one, or it opens in the
+  browser**: that shortcut was saved before the app became installable,
+  and old shortcuts don't update on their own. Delete the old icon from
+  the home screen and re-add it (see "Install it on your phones"
+  above) — the new one opens full screen with the book icon and the
+  name "Co-op Mode".
