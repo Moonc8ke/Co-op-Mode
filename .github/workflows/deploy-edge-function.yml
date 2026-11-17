@@ -1,0 +1,41 @@
+# Co-op Mode — deploy the send-push Edge Function.
+#
+# Runs automatically when the function code changes, or manually from the
+# Actions tab (workflow_dispatch). It sets the Edge Function secrets and
+# then deploys the function, so no Supabase CLI is needed on your PC.
+#
+# Needs these repo secrets (GitHub repo → Settings → Secrets and
+# variables → Actions):
+#   SUPABASE_ACCESS_TOKEN — from the Supabase dashboard (Settings → Access Tokens)
+#   SUPABASE_PROJECT_REF  — the Co-op mode project ref (in the dashboard URL)
+#   VAPID_PRIVATE_KEY     — the private VAPID key (keep it a secret; never commit it)
+#
+# The VAPID public key below is public by design (it is also hardcoded in
+# src/lib/push.ts), so it is safe to have it in this file.
+name: Deploy send-push Edge Function
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/functions/send-push/**"
+      - ".github/workflows/deploy-edge-function.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+      - name: Set Edge Function secrets
+        run: |
+          supabase secrets set \
+            VAPID_PUBLIC_KEY="BMN_UsjtfIlrdK4-qgkyDQvumv-lxWdh0_N10L3UjvKFNPu9wbZynKYl1NipTnU3qzogDRlZ7SshzA5Hm95l9JU" \
+            VAPID_PRIVATE_KEY="${{ secrets.VAPID_PRIVATE_KEY }}" \
+            VAPID_SUBJECT="mailto:rabe.andrew@yahoo.com" \
+            --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
+      - name: Deploy send-push
+        run: supabase functions deploy send-push --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
