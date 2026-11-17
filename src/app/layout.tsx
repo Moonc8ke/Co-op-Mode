@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { ServiceWorkerRegister } from "@/components/sw-register";
 
 export const metadata: Metadata = {
   title: "Andrew & Juliette — Our Book",
@@ -98,6 +99,9 @@ export default function RootLayout({
         ))}
       </head>
       <body className="bg-[var(--bg)] text-[var(--text)] antialiased">
+        {/* Registers the push-only service worker (public/sw.js). It
+            never caches anything — it only shows notifications. */}
+        <ServiceWorkerRegister />
         {children}
       </body>
     </html>

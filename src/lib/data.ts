@@ -12,6 +12,8 @@ import type {
   Person,
   Profile,
   Season,
+  TellYouLater,
+  TellYouLaterKind,
 } from "./types";
 
 export const SCRAPBOOK_BUCKET = "scrapbook-photos";
@@ -130,6 +132,17 @@ export async function listCravings(
     .order("id", { ascending: false });
   if (error) throw error;
   return data as Craving[];
+}
+
+export async function listTellYouLater(
+  supabase: SupabaseClient,
+): Promise<TellYouLater[]> {
+  const { data, error } = await supabase
+    .from("tell_you_later")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data as TellYouLater[];
 }
 
 /* ---------------- Items ---------------- */
@@ -406,6 +419,70 @@ export async function deleteCraving(
   if (error) throw error;
 }
 
+/* ---------------- Tell you later ---------------- */
+
+export async function addTellYouLater(
+  supabase: SupabaseClient,
+  args: {
+    text: string;
+    kind: TellYouLaterKind;
+    note?: string;
+    wanted_by: Person;
+  },
+): Promise<string> {
+  const { data, error } = await supabase
+    .from("tell_you_later")
+    .insert({
+      text: args.text.trim(),
+      kind: args.kind,
+      note: (args.note ?? "").trim(),
+      wanted_by: args.wanted_by,
+      is_done: false,
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
+  return data.id as string;
+}
+
+/** Marks an open note as told / done / celebrated, recording who did
+ * it. Throws when the note is already done. */
+export async function markTellYouLaterDone(
+  supabase: SupabaseClient,
+  id: string,
+  args: { done_by: Person },
+): Promise<void> {
+  const { data, error } = await supabase
+    .from("tell_you_later")
+    .select("is_done")
+    .eq("id", id)
+    .single();
+  if (error) throw error;
+  if (data.is_done) {
+    throw new Error("That one was already taken care of.");
+  }
+  const { error: updateError } = await supabase
+    .from("tell_you_later")
+    .update({
+      is_done: true,
+      done_by: args.done_by,
+      done_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (updateError) throw updateError;
+}
+
+export async function deleteTellYouLater(
+  supabase: SupabaseClient,
+  id: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("tell_you_later")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
+}
+
 /* ---------------- Scrapbook memories ---------------- */
 
 /** Shrinks big phone photos before upload so they save fast. Same rule as
@@ -500,6 +577,7 @@ export function buildBackup(
   events: CalEvent[],
   proposals: DinnerProposal[],
   cravings: Craving[],
+  tellYouLater: TellYouLater[],
   memories: Memory[],
 ): BackupPayload {
   return {
@@ -508,6 +586,7 @@ export function buildBackup(
     events,
     dinner_proposals: proposals,
     cravings,
+    tell_you_later: tellYouLater,
     memories: memories.map((m) => ({
       id: m.id,
       caption: m.caption,
@@ -533,6 +612,7 @@ export interface ImportResult {
   events: number;
   proposals: number;
   cravings: number;
+  tellYouLater: number;
   memories: number;
   skipped: number;
 }
@@ -562,6 +642,7 @@ export async function importBackup(
     events: 0,
     proposals: 0,
     cravings: 0,
+    tellYouLater: 0,
     memories: 0,
     skipped: 0,
   };
@@ -738,6 +819,41 @@ export async function importBackup(
     });
     if (error) result.skipped += 1;
     else result.cravings += 1;
+  }
+
+  // "Tell you later" notes are new in migration 0005, so older backups
+  // may not have them at all — that is fine, nothing is skipped for a
+  // missing list.
+  const rawTellYouLater = Array.isArray(raw.tell_you_later)
+    ? raw.tell_you_later
+    : [];
+  for (const r of rawTellYouLater) {
+    const row = r as Record<string, unknown>;
+    if (
+      typeof row.text !== "string" ||
+      !row.text.trim() ||
+      (row.kind !== "tell" && row.kind !== "do" && row.kind !== "news") ||
+      (row.wanted_by !== "Andrew" && row.wanted_by !== "Juliette")
+    ) {
+      result.skipped += 1;
+      continue;
+    }
+    const isDone = row.is_done === true;
+    const { error } = await supabase.from("tell_you_later").insert({
+      kind: row.kind,
+      text: row.text.trim().slice(0, 500),
+      note: typeof row.note === "string" ? row.note.slice(0, 1000) : "",
+      wanted_by: row.wanted_by,
+      is_done: isDone,
+      done_by:
+        row.done_by === "Andrew" || row.done_by === "Juliette"
+          ? row.done_by
+          : null,
+      done_at:
+        isDone && typeof row.done_at === "string" ? row.done_at : null,
+    });
+    if (error) result.skipped += 1;
+    else result.tellYouLater += 1;
   }
 
   return result;

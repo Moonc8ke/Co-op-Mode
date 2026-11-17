@@ -88,6 +88,20 @@ export interface Craving {
   fulfilled_at: string | null;
 }
 
+export type TellYouLaterKind = "tell" | "do" | "news";
+
+export interface TellYouLater {
+  id: string;
+  kind: TellYouLaterKind;
+  text: string;
+  note: string;
+  wanted_by: Person;
+  is_done: boolean;
+  done_by: Person | null;
+  created_at: string;
+  done_at: string | null;
+}
+
 /** The JSON backup format. Identical to the prototype's export so a backup
  * downloaded from the prototype can be imported here, and vice versa. */
 export interface BackupPayload {
@@ -96,6 +110,7 @@ export interface BackupPayload {
   events: CalEvent[];
   dinner_proposals: DinnerProposal[];
   cravings: Craving[];
+  tell_you_later: TellYouLater[];
   memories: Array<{
     id: number;
     caption: string;

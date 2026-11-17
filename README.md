@@ -30,12 +30,21 @@ a couple plans and remembers together:
   for Y" (food, an item, anything), with an optional note. The other
   can mark it "Got it", recording who fulfilled it and where they found
   it. Fulfilled cravings move to a collapsible history.
+- **Tell you later** — something to tell the other, a thing to
+  remember to do, or good news worth celebrating later, before it's
+  forgotten by dinner. Three kinds: "Tell you", "Remind me to do",
+  and "Good news", each with an optional "when?" note. Mark one "Told
+  you", "Done", or "Celebrated" and it moves to a collapsible history.
+- **Push notifications** — a gentle ping on your phone when the other
+  posts a craving, suggests a dinner, or leaves you a note. Each phone
+  opts in once from a banner on the home page; saying no hides it and
+  never nags. See "Push notifications" below for the setup.
 - **It knows who you are** — each account picks a name once ("Who are
-  you?"), saved on that account, so the dinner and cravings forms
-  already know who's typing. No more "I'm Andrew / I'm Juliette" toggle
-  on every post, and no identity UI on the forms at all — the name
-  shows up on the posted item instead ("Andrew suggested…",
-  "Juliette is craving…").
+  you?"), saved on that account, so the dinner, cravings, and
+  tell-you-later forms already know who's typing. No more "I'm Andrew /
+  I'm Juliette" toggle on every post, and no identity UI on the forms
+  at all — the name shows up on the posted item instead ("Andrew
+  suggested…", "Juliette is craving…").
 - **Scrapbook** — photos with a caption and date, shown as tilted
   polaroids with a lightbox.
 - **Backup** — export everything as JSON, or import a backup file (the
@@ -100,6 +109,18 @@ database, its own keys, and its own storage bucket.
    table so dinner suggestions can be laid out by day. Run 0004 only
    after 0003. Dinner suggestions saved before this change have no
    date and keep working; they show under "No day picked yet".
+8. Repeat with `supabase/migrations/0005_tell_you_later.sql` in a new
+   query. It adds the `tell_you_later` table (the "Tell you later"
+   section) with the same Row Level Security pattern. Run 0005 only
+   after 0004.
+9. Repeat with `supabase/migrations/0006_push_subscriptions.sql` in a
+   new query. It adds the `push_subscriptions` table (one row per phone
+   that enables push notifications). Unlike the shared tables, each
+   person can only see their own subscriptions — the Edge Function
+   reads them with the service role key instead. Run 0006 only after
+   0005. If you don't want push notifications, you can skip this file
+   and the Edge Function in the "Push notifications" section; the app
+   works exactly as before without them.
 
 You can re-run any file safely — they use `create table if not exists`
 and drop policies before recreating them.
@@ -172,9 +193,73 @@ behaviour on its own — delete it first, then re-add it once:
 After this one-time re-add, the app keeps updating itself automatically
 whenever a new version is deployed — it's still the same website
 underneath. It needs internet to load and to sync between your two
-phones, the same as the website does. (There is deliberately no service
-worker: nothing is cached offline, so you never get a stale copy of the
-app and it can't interfere with sign-in.)
+phones, the same as the website does. (There is a service worker now,
+but it only handles push notifications — nothing is cached offline, so
+you never get a stale copy of the app and it can't interfere with
+sign-in.)
+
+### Push notifications
+
+When one of you posts a craving, suggests a dinner, or leaves a
+"Tell you later" note, the other gets a gentle ping on their phone.
+Each phone opts in once from a banner on the home page; saying no
+hides it and never nags. The banner only shows when push can work on
+that phone and no choice has been made yet.
+
+How it works: the app registers a small service worker that only
+handles notifications (it never caches anything), the phone saves a
+push subscription in the `push_subscriptions` table, and a Supabase
+Edge Function (`supabase/functions/send-push`) sends the ping when a
+new row appears. Scope is v1: only cravings, dinner proposals, and
+tell-you-later notes send notifications — bucket-list items, calendar
+events, and scrapbook memories do not.
+
+The app code deploys itself through Vercel as usual. The rest needs
+your Supabase login, in order:
+
+1. **Run migrations 0005 and 0006** in the Co-op mode Supabase SQL
+   Editor (step 2 above). 0005 adds the `tell_you_later` table; 0006
+   adds the `push_subscriptions` table.
+2. **Set the Edge Function secrets** with the Supabase CLI. First
+   link the CLI to the project (the project ref is the part after
+   `/project/` in the dashboard URL):
+   ```bash
+   supabase link --project-ref <your-project-ref>
+   supabase secrets set \
+     VAPID_PUBLIC_KEY="BMN_UsjtfIlrdK4-qgkyDQvumv-lxWdh0_N10L3UjvKFNPu9wbZynKYl1NipTnU3qzogDRlZ7SshzA5Hm95l9JU" \
+     VAPID_PRIVATE_KEY="<the private key shared with you directly>" \
+     VAPID_SUBJECT="mailto:rabe.andrew@yahoo.com"
+   ```
+   The public key is already hardcoded in `src/lib/push.ts` (it is
+   public by design). The **private key is never stored in this repo**
+   — it was generated with the app code and shared with you directly;
+   paste that value in place of `<the private key shared with you
+   directly>`. If you ever lose it, generate a new pair and update
+   both the secret and `src/lib/push.ts` to match.
+3. **Deploy the Edge Function** with the Supabase CLI, from this repo:
+   ```bash
+   supabase functions deploy send-push
+   ```
+4. **Create the Database Webhooks** in the Supabase dashboard
+   (Database → Webhooks), one per table — a webhook watches a single
+   table. For each of `cravings`, `dinner_proposals`, and
+   `tell_you_later`:
+   - Name: `send-push-cravings` (and so on for each table)
+   - Table: the table name; Events: **INSERT only**
+   - Type: HTTP Request, Method: **POST**
+   - URL: `https://<your-project-ref>.supabase.co/functions/v1/send-push`
+   - HTTP Headers: `Authorization: Bearer <your anon key>` (Project
+     Settings → API) and `Content-Type: application/json`
+5. **Enable notifications on each phone**: open the app, and tap
+   **Enable notifications** on the banner at the top of the home page.
+   The browser asks for permission once. On iPhone this only works if
+   the app is installed on the Home Screen and the phone runs iOS 16.4
+   or later; on Android it works from the installed app in Chrome.
+
+To test it, post a craving from one phone and watch the other. If a
+phone stops receiving pings (app uninstalled, permission revoked), the
+Edge Function deletes that phone's subscription the next time it tries
+to send to it, so it never keeps trying a dead device.
 
 ### 6. (Optional) Import the prototype's data
 
@@ -203,6 +288,11 @@ you want them back in the scrapbook.
   and Juliette share everything on purpose, and there is no per-user
   ownership. If the app ever grows beyond the two of them, add an
   `owner_id` column and tighten the policies before inviting anyone else.
+  The one exception is `push_subscriptions` (migration 0006): each
+  person can only see their own notification subscriptions, because a
+  subscription belongs to one phone. The send-push Edge Function reads
+  them with the service role key instead, so it can notify the other
+  person.
 - **Who's who:** The `profiles` table (migration 0003) holds one row per
   account with a `display_name` of Andrew or Juliette. The app reads it
   on sign-in; dinner suggestions and cravings are posted as that person,
@@ -272,6 +362,13 @@ src/
                           counter flow, laid out by day
     cravings.tsx          Cravings board: post a craving or a wish, mark
                           it "Got it" with who fulfilled it and where
+    tell-you-later.tsx    "Tell you later": something to tell the other,
+                          a thing to remember to do, or good news to
+                          celebrate later; mark it told / done /
+                          celebrated
+    push-banner.tsx       Dismissible "Enable notifications" banner on
+                          the home page
+    sw-register.tsx       Registers the push-only service worker
     identity.tsx          "Who are you?" picker and the compact
                           in-form name chooser
     scrapbook.tsx         Polaroid grid, photo upload, lightbox
@@ -281,6 +378,8 @@ src/
     supabase/             Browser, server, and middleware Supabase clients
     data.ts               All Supabase reads/writes, photo upload,
                           backup export/import
+    push.ts               Web Push helpers: VAPID public key, subscribe
+                          this device and save its subscription
     seasons.ts            Season math, date formatting
     suggestions.ts        Category metadata + suggestion chips
     types.ts              Shared types + backup file format
@@ -291,6 +390,13 @@ supabase/
     0003_profiles.sql     Profiles table + RLS (run after 0002)
     0004_dinner_dates.sql Dinner date column on dinner_proposals
                           (run after 0003)
+    0005_tell_you_later.sql  "Tell you later" table + RLS (run after 0004)
+    0006_push_subscriptions.sql  Push subscriptions, one row per
+                          phone (run after 0005)
+  functions/
+    send-push/index.ts    Edge Function: notifies the other partner when
+                          a craving, dinner proposal, or tell-you-later
+                          note is posted (webhooks on INSERT)
 ```
 
 ## Troubleshooting
@@ -322,6 +428,26 @@ supabase/
   Editor (after 0003) and reload the app. Until it runs, suggesting a
   dinner fails (the save needs the new column), while older
   suggestions still load and show under "No day picked yet".
+- **"Tell you later" won't load or save**: the `tell_you_later`
+  table comes from migration 0005, which runs separately from
+  0001–0004. Run `supabase/migrations/0005_tell_you_later.sql` in the
+  project's SQL Editor (after 0004) and reload the app.
+- **The notifications banner never appears**: push needs a browser
+  that supports it. On iPhone it only works for the app installed on
+  the Home Screen (iOS 16.4+), not from Safari directly, and only
+  after the app has been opened at least once. If permission was
+  already denied, the banner hides itself — re-enable notifications
+  in the browser's site settings for the app's address. If the banner
+  was dismissed with "Not now", it stays hidden on that phone.
+- **Notifications aren't arriving**: check the pieces in order — the
+  `push_subscriptions` table exists (migration 0006), the Edge
+  Function is deployed (`supabase functions list` should show
+  `send-push`), the three webhooks exist (Database → Webhooks) and
+  are enabled, and the phone tapped "Enable notifications" (the
+  banner hides once it's on). The Edge Function's logs (Supabase
+  dashboard → Edge Functions → send-push → Logs) show each send, and
+  a "VAPID keys not configured" error means step 2 of the push setup
+  hasn't run.
 - **Photo upload fails**: check the `scrapbook-photos` bucket exists in
   the new project's **Storage** section (the migration creates it). If it
   is missing, re-run the migration SQL.

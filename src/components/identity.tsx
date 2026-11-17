@@ -6,10 +6,10 @@ import { DetailDialog } from "./shared";
 /** The one-time "Who are you?" picker. Shown the first time someone
  * signs in, before the app knows which of the two people the account
  * belongs to. The choice is saved to the profiles table, so after this
- * the dinner and cravings forms already know who is typing — silently,
- * with no identity UI on the forms themselves. The name shows up on
- * the posted item instead ("Andrew suggested…", "Juliette is
- * craving…"). */
+ * the dinner, cravings, and tell-you-later forms already know who is
+ * typing — silently, with no identity UI on the forms themselves. The
+ * name shows up on the posted item instead ("Andrew suggested…",
+ * "Juliette is craving…"). */
 export function IdentityPickerModal({
   saving,
   error,
@@ -32,9 +32,9 @@ export function IdentityPickerModal({
         </h2>
         <p className="mt-1.5 text-sm leading-relaxed text-[var(--dim)]">
           Pick your name once and the app will remember it on your
-          account, so the dinner and cravings forms already know who&apos;s
-          typing. Your name shows up on the things you post, so the other
-          can see who suggested what.
+          account, so the dinner, cravings, and tell-you-later forms
+          already know who&apos;s typing. Your name shows up on the things
+          you post, so the other can see who suggested what.
         </p>
       </div>
       <div className="mt-4 flex flex-col gap-2">

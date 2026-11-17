@@ -13,6 +13,7 @@ import {
   listEvents,
   listItems,
   listMemories,
+  listTellYouLater,
   setMyProfile,
   type ImportResult,
 } from "@/lib/data";
@@ -33,13 +34,16 @@ import type {
   Memory,
   Person,
   Season,
+  TellYouLater,
 } from "@/lib/types";
 import { CategorySection, ItemCard } from "./items";
 import { CalendarSection, EventCard } from "./calendar";
 import { CravingsSection } from "./cravings";
 import { DinnerDecisionsSection } from "./dinner";
 import { IdentityPickerModal } from "./identity";
+import { PushBanner } from "./push-banner";
 import { ScrapbookSection } from "./scrapbook";
+import { TellYouLaterSection } from "./tell-you-later";
 import { EmptyNote, SectionHeader, sectionPanelStyle, useCollapsedSections } from "./shared";
 
 type View = "home" | "add" | "scrapbook";
@@ -52,6 +56,7 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [proposals, setProposals] = useState<DinnerProposal[]>([]);
   const [cravings, setCravings] = useState<Craving[]>([]);
+  const [tellYouLater, setTellYouLater] = useState<TellYouLater[]>([]);
   const [memories, setMemories] = useState<Memory[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -73,18 +78,26 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
 
   const load = useCallback(async () => {
     try {
-      const [itemsData, eventsData, proposalsData, cravingsData, memoriesData] =
-        await Promise.all([
-          listItems(supabase),
-          listEvents(supabase),
-          listDinnerProposals(supabase),
-          listCravings(supabase),
-          listMemories(supabase),
-        ]);
+      const [
+        itemsData,
+        eventsData,
+        proposalsData,
+        cravingsData,
+        tellYouLaterData,
+        memoriesData,
+      ] = await Promise.all([
+        listItems(supabase),
+        listEvents(supabase),
+        listDinnerProposals(supabase),
+        listCravings(supabase),
+        listTellYouLater(supabase),
+        listMemories(supabase),
+      ]);
       setItems(itemsData);
       setEvents(eventsData);
       setProposals(proposalsData);
       setCravings(cravingsData);
+      setTellYouLater(tellYouLaterData);
       setMemories(memoriesData);
       setLoadError("");
     } catch {
@@ -249,7 +262,9 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
   }
 
   function exportBackup() {
-    downloadBackup(buildBackup(items, events, proposals, cravings, memories));
+    downloadBackup(
+      buildBackup(items, events, proposals, cravings, tellYouLater, memories),
+    );
   }
 
   // Import a backup file (the prototype's export format, or one from
@@ -349,6 +364,10 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
                 Add new things
               </button>
             </header>
+
+            {/* Push notifications: a one-time, dismissible offer to get
+                a ping when the other posts something. */}
+            <PushBanner me={me} />
 
             {/* Season-change greeting: shown once when a new season begins. */}
             {prevSeason && (
@@ -477,6 +496,19 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
               identitySaving={identitySaving}
               identityError={identityError}
               {...collapseProps("cravings")}
+            />
+
+            {/* Tell you later: something to tell the other, a thing to
+                remember to do, or good news to celebrate later. */}
+            <TellYouLaterSection
+              entries={tellYouLater}
+              refresh={load}
+              me={me}
+              onPickIdentity={(person) => void saveIdentity(person)}
+              onNeedIdentity={() => setIdentityModal("first-run")}
+              identitySaving={identitySaving}
+              identityError={identityError}
+              {...collapseProps("tell-you-later")}
             />
 
             {/* Seasonal bucket list: browse any season, current one first. */}
@@ -772,7 +804,8 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
                 <p className="mt-2 text-sm text-[var(--dim)]">
                   Imported {importResult.items} ideas, {importResult.events}{" "}
                   plans, {importResult.proposals} dinner suggestions,{" "}
-                  {importResult.cravings} cravings, and{" "}
+                  {importResult.cravings} cravings,{" "}
+                  {importResult.tellYouLater} tell-you-later notes, and{" "}
                   {importResult.memories} memories
                   {importResult.skipped > 0
                     ? ` (${importResult.skipped} rows skipped)`
@@ -831,6 +864,16 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
             />
             <CravingsSection
               cravings={cravings}
+              compact
+              refresh={load}
+              me={me}
+              onPickIdentity={(person) => void saveIdentity(person)}
+              onNeedIdentity={() => setIdentityModal("first-run")}
+              identitySaving={identitySaving}
+              identityError={identityError}
+            />
+            <TellYouLaterSection
+              entries={tellYouLater}
               compact
               refresh={load}
               me={me}
