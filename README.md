@@ -250,6 +250,9 @@ public/
                         (generated, gitignored)
   apple-touch-icon.png  iPhone home-screen icon, 180x180
                         (generated, gitignored)
+  launch-*.png          iPhone launch images, 8 portrait sizes
+                        (generated from scripts/launch-template.svg
+                        by scripts/generate-icons.mjs, gitignored)
 src/
   app/
     layout.tsx            Root layout + metadata

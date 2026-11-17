@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {{WIDTH}} {{HEIGHT}}" width="{{WIDTH}}" height="{{HEIGHT}}">
+  <!-- iPhone launch image template: warm cream background, the pixel book
+       artwork from public/icon.svg, and "Co-op Mode" in pixel letters.
+       Text template only — never rendered directly. The prebuild script
+       (scripts/generate-icons.mjs) fills in the placeholders per device
+       size and renders the PNGs at build time. -->
+  <rect width="{{WIDTH}}" height="{{HEIGHT}}" fill="#fff7ed"/>
+  <g transform="translate({{BOOK_X}} {{BOOK_Y}}) scale({{BOOK_SCALE}})">
+    {{ARTWORK}}
+  </g>
+  <g fill="#4a1942">
+    {{TEXT}}
+  </g>
+</svg>

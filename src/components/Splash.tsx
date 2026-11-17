@@ -1,3 +1,7 @@
+// NOTE: currently UNUSED — removed from the root layout on Nov 17, 2026
+// at Andrew's request (he preferred the phone's own splash only, and
+// having both felt redundant). Kept so it can be re-enabled later by
+// rendering <Splash /> in src/app/layout.tsx. Do not delete.
 "use client";
 
 import { useEffect, useRef, useState } from "react";

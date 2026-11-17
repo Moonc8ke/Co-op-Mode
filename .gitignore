@@ -21,6 +21,17 @@ public/icon-512.png
 public/icon-maskable-512.png
 public/apple-touch-icon.png
 
+# iPhone launch images (generated at build time from
+# scripts/launch-template.svg by scripts/generate-icons.mjs; do not commit)
+public/launch-1290x2796.png
+public/launch-1179x2556.png
+public/launch-1284x2778.png
+public/launch-1170x2532.png
+public/launch-1125x2436.png
+public/launch-828x1792.png
+public/launch-750x1334.png
+public/launch-640x1136.png
+
 # Debug
 npm-debug.log*
 yarn-debug.log*
