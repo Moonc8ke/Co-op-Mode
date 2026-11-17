@@ -37,12 +37,23 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-[var(--bg)] px-4 text-[var(--text)]">
       <main className="w-full max-w-sm rounded-[1.4rem] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm">
-        <p className="text-sm font-medium tracking-wide text-[var(--accent)]">
+        <img
+          src="/icon-192.png"
+          alt="Co-op Mode logo"
+          width={84}
+          height={84}
+          style={{ imageRendering: "pixelated" }}
+          className="mx-auto block"
+        />
+        <p className="mt-4 text-sm font-medium tracking-wide text-[var(--accent)]">
           Andrew &amp; Juliette
         </p>
         <h1 className="font-display mt-1 text-3xl font-semibold leading-tight">
           Our book, together
         </h1>
+        <p className="mt-1 text-xs font-semibold uppercase tracking-[0.25em] text-[var(--accent)]">
+          Co-op Mode
+        </p>
         <p className="mt-2 text-sm text-[var(--dim)]">
           Sign in to see your shared bucket lists, calendar, dinner decisions,
           and scrapbook.
