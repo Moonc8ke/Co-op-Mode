@@ -22,7 +22,14 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#fff7ed",
+  // Media-aware so the status-bar area matches the app's color scheme:
+  // the app follows the phone's dark mode (see globals.css), and Chrome
+  // paints the status-bar area of an installed PWA from theme-color, so a
+  // single light value left a light strip across the top in dark mode.
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#fff7ed" },
+    { media: "(prefers-color-scheme: dark)", color: "#1c1512" },
+  ],
 };
 
 // iPhone launch images (portrait). iOS shows the matching one instead of a
