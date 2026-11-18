@@ -44,9 +44,70 @@ import { IdentityPickerModal } from "./identity";
 import { PushBanner } from "./push-banner";
 import { ScrapbookSection } from "./scrapbook";
 import { TellYouLaterSection } from "./tell-you-later";
-import { EmptyNote, SectionHeader, sectionPanelStyle, useCollapsedSections } from "./shared";
+import {
+  EmptyNote,
+  HOME_SECTION_LABELS,
+  SectionHeader,
+  sectionPanelStyle,
+  useCollapsedSections,
+  useHomeLayout,
+  type HomeSectionId,
+} from "./shared";
 
 type View = "home" | "add" | "scrapbook";
+
+/** The little control row shown above a section while the home page is
+ * in Edit layout mode: up/down arrows to move it, and Hide to tuck it
+ * away. Arrows only — no drag-and-drop, which is fiddly on a phone. */
+function LayoutEditBar({
+  id,
+  isFirst,
+  isLast,
+  onMoveUp,
+  onMoveDown,
+  onHide,
+}: {
+  id: HomeSectionId;
+  isFirst: boolean;
+  isLast: boolean;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onHide: () => void;
+}) {
+  const label = HOME_SECTION_LABELS[id];
+  return (
+    <div className="mb-2 flex flex-wrap items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-sm shadow-sm">
+      <span className="font-semibold">{label}</span>
+      <span className="flex-1" />
+      <button
+        type="button"
+        onClick={onMoveUp}
+        disabled={isFirst}
+        aria-label={`Move ${label} up`}
+        className="rounded-full border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1 text-sm font-semibold disabled:opacity-40"
+      >
+        ↑ Up
+      </button>
+      <button
+        type="button"
+        onClick={onMoveDown}
+        disabled={isLast}
+        aria-label={`Move ${label} down`}
+        className="rounded-full border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1 text-sm font-semibold disabled:opacity-40"
+      >
+        ↓ Down
+      </button>
+      <button
+        type="button"
+        onClick={onHide}
+        aria-label={`Hide ${label}`}
+        className="rounded-full border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1 text-sm font-semibold"
+      >
+        Hide
+      </button>
+    </div>
+  );
+}
 
 const SEEN_SEASON_KEY = "couples-app-season-seen";
 
@@ -168,6 +229,28 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
     collapsed: isCollapsed(id),
     onToggleCollapsed: () => toggleSection(id),
   });
+  // Home-page layout: which sections are shown, and in what order.
+  // Kept in localStorage per device, so each person arranges their own
+  // home page. Hiding a section never deletes anything. The Add &
+  // browse page doesn't use this, so its sections stay as they are.
+  const layout = useHomeLayout();
+  const [editingLayout, setEditingLayout] = useState(false);
+  // Renders the edit controls above one section while Edit layout mode
+  // is on: up/down arrows to move it, Hide to tuck it away.
+  const editBar = (id: HomeSectionId) => {
+    if (!editingLayout) return null;
+    const at = layout.indexOf(id);
+    return (
+      <LayoutEditBar
+        id={id}
+        isFirst={at <= 0}
+        isLast={at < 0 || at >= layout.order.length - 1}
+        onMoveUp={() => layout.moveUp(id)}
+        onMoveDown={() => layout.moveDown(id)}
+        onHide={() => layout.hide(id)}
+      />
+    );
+  };
   // The seasonal panel can browse any season, not just the current one;
   // it starts on the current season.
   const [viewSeason, setViewSeason] = useState<Season>(season);
@@ -363,6 +446,30 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
                 </span>
                 Add new things
               </button>
+              <button
+                type="button"
+                onClick={() => setEditingLayout((v) => !v)}
+                aria-pressed={editingLayout}
+                className="ml-2 mt-4 inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-5 py-2.5 text-base font-semibold shadow-sm"
+              >
+                {editingLayout ? "✓ Done" : "Edit layout"}
+              </button>
+              {editingLayout && (
+                <button
+                  type="button"
+                  onClick={() => layout.reset()}
+                  className="ml-2 mt-4 inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-5 py-2.5 text-base font-semibold shadow-sm"
+                >
+                  Reset layout
+                </button>
+              )}
+              {editingLayout && (
+                <p className="mt-2 text-sm text-[var(--dim)]">
+                  Use the arrows to move a section, Hide to tuck it away.
+                  Hidden sections can be brought back from the bottom of the
+                  page.
+                </p>
+              )}
             </header>
 
             {/* Push notifications: a one-time, dismissible offer to get
@@ -437,6 +544,13 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
               </section>
             )}
 
+            {/* Home sections, in the saved layout order. The wrapper is a
+                flex column so each section can be moved with the `order`
+                style; hiding one just leaves it out. */}
+            <div className="flex flex-col">
+            {layout.isVisible("coming-up") && (
+              <div style={{ order: layout.indexOf("coming-up") }}>
+                {editBar("coming-up")}
             {/* Coming up: the next plans on the calendar, soonest first. */}
             <section
               aria-label="Coming up"
@@ -470,8 +584,13 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
                 </>
               )}
             </section>
+              </div>
+            )}
 
             {/* Dinner decisions: suggest, accept, decline, or counter. */}
+            {layout.isVisible("dinner-week") && (
+              <div style={{ order: layout.indexOf("dinner-week") }}>
+                {editBar("dinner-week")}
             <DinnerDecisionsSection
               proposals={proposals}
               dinnerIdeas={items.filter(
@@ -485,8 +604,13 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
               identityError={identityError}
               {...collapseProps("dinner-week")}
             />
+              </div>
+            )}
 
             {/* Cravings: post a hankering, the other can surprise you. */}
+            {layout.isVisible("cravings") && (
+              <div style={{ order: layout.indexOf("cravings") }}>
+                {editBar("cravings")}
             <CravingsSection
               cravings={cravings}
               refresh={load}
@@ -497,9 +621,14 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
               identityError={identityError}
               {...collapseProps("cravings")}
             />
+              </div>
+            )}
 
             {/* Tell you later: something to tell the other, a thing to
                 remember to do, or good news to celebrate later. */}
+            {layout.isVisible("tell-you-later") && (
+              <div style={{ order: layout.indexOf("tell-you-later") }}>
+                {editBar("tell-you-later")}
             <TellYouLaterSection
               entries={tellYouLater}
               refresh={load}
@@ -510,8 +639,13 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
               identityError={identityError}
               {...collapseProps("tell-you-later")}
             />
+              </div>
+            )}
 
             {/* Seasonal bucket list: browse any season, current one first. */}
+            {layout.isVisible("seasonal") && (
+              <div style={{ order: layout.indexOf("seasonal") }}>
+                {editBar("seasonal")}
             <section
               aria-label="Seasonal bucket list"
               className="mt-6 rounded-[1.4rem] border border-[var(--border)] p-4 shadow-sm sm:p-5"
@@ -605,10 +739,15 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
                 </>
               )}
             </section>
+              </div>
+            )}
 
             {/* Long-term bucket list, places, and idea collections —
                 now on the home page too, browse-only. Adding new things
                 still happens on the Add & browse page. */}
+            {layout.isVisible("collection-longterm") && (
+              <div style={{ order: layout.indexOf("collection-longterm") }}>
+                {editBar("collection-longterm")}
             <CategorySection
               category="longterm"
               items={items}
@@ -616,6 +755,11 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
               showAdd={false}
               {...collapseProps("collection-longterm")}
             />
+              </div>
+            )}
+            {layout.isVisible("collection-places") && (
+              <div style={{ order: layout.indexOf("collection-places") }}>
+                {editBar("collection-places")}
             <CategorySection
               category="places"
               items={items}
@@ -623,6 +767,11 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
               showAdd={false}
               {...collapseProps("collection-places")}
             />
+              </div>
+            )}
+            {layout.isVisible("collection-date") && (
+              <div style={{ order: layout.indexOf("collection-date") }}>
+                {editBar("collection-date")}
             <CategorySection
               category="date"
               items={items}
@@ -630,6 +779,11 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
               showAdd={false}
               {...collapseProps("collection-date")}
             />
+              </div>
+            )}
+            {layout.isVisible("collection-dinner") && (
+              <div style={{ order: layout.indexOf("collection-dinner") }}>
+                {editBar("collection-dinner")}
             <CategorySection
               category="dinner"
               items={items}
@@ -637,6 +791,11 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
               showAdd={false}
               {...collapseProps("collection-dinner")}
             />
+              </div>
+            )}
+            {layout.isVisible("collection-recipe") && (
+              <div style={{ order: layout.indexOf("collection-recipe") }}>
+                {editBar("collection-recipe")}
             <CategorySection
               category="recipe"
               items={items}
@@ -644,6 +803,11 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
               showAdd={false}
               {...collapseProps("collection-recipe")}
             />
+              </div>
+            )}
+            {layout.isVisible("collection-craft") && (
+              <div style={{ order: layout.indexOf("collection-craft") }}>
+                {editBar("collection-craft")}
             <CategorySection
               category="craft"
               items={items}
@@ -651,8 +815,13 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
               showAdd={false}
               {...collapseProps("collection-craft")}
             />
+              </div>
+            )}
 
             {/* Pick for tonight */}
+            {layout.isVisible("pick-tonight") && (
+              <div style={{ order: layout.indexOf("pick-tonight") }}>
+                {editBar("pick-tonight")}
             <section
               aria-label="Pick for tonight"
               className="mt-6 rounded-[1.4rem] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-5"
@@ -713,8 +882,13 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
                 </p>
               )}
             </section>
+              </div>
+            )}
 
             {/* Scrapbook: a peek at the latest photos, and the way in. */}
+            {layout.isVisible("scrapbook") && (
+              <div style={{ order: layout.indexOf("scrapbook") }}>
+                {editBar("scrapbook")}
             <section
               aria-label="Scrapbook"
               className="mt-6 rounded-[1.4rem] border border-[var(--border)] p-4 shadow-sm sm:p-5"
@@ -774,6 +948,47 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
                 </>
               )}
             </section>
+              </div>
+            )}
+            </div>
+
+            {/* Hidden sections: only appears when at least one section is
+                tucked away. Each one gets its own Show button, so any
+                single section comes back without resetting the layout. */}
+            {layout.hidden.length > 0 && (
+              <section
+                aria-label="Hidden sections"
+                className="mt-6 rounded-[1.4rem] border border-dashed border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-5"
+              >
+                <h2 className="font-display text-xl font-semibold leading-tight">
+                  Hidden sections
+                </h2>
+                <p className="mt-0.5 text-sm text-[var(--dim)]">
+                  Tucked away for now. Show one to bring it back at the
+                  bottom of your home page, then move it where you like.
+                </p>
+                <ul className="mt-3 space-y-2">
+                  {layout.hidden.map((id) => (
+                    <li
+                      key={id}
+                      className="flex items-center justify-between gap-3"
+                    >
+                      <span className="text-sm font-medium">
+                        {HOME_SECTION_LABELS[id]}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => layout.show(id)}
+                        aria-label={`Show ${HOME_SECTION_LABELS[id]}`}
+                        className="rounded-full bg-[var(--accent)] px-4 py-1.5 text-sm font-semibold text-white"
+                      >
+                        Show
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
 
             {/* Backup: download everything, or restore from a file. */}
             <div className="mt-8 text-center">

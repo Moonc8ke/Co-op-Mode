@@ -61,6 +61,163 @@ export function useCollapsedSections() {
   return { isCollapsed, toggle };
 }
 
+const HOME_LAYOUT_KEY = "couples-app-home-layout";
+
+/** The home-page sections, in their default top-to-bottom order. Every
+ * section in this list can be hidden or moved; anything not listed here
+ * (the header, the push banner, the one-time season greeting, the
+ * backup buttons, the footer) stays fixed. */
+export const HOME_SECTION_IDS = [
+  "coming-up",
+  "dinner-week",
+  "cravings",
+  "tell-you-later",
+  "seasonal",
+  "collection-longterm",
+  "collection-places",
+  "collection-date",
+  "collection-dinner",
+  "collection-recipe",
+  "collection-craft",
+  "pick-tonight",
+  "scrapbook",
+] as const;
+
+export type HomeSectionId = (typeof HOME_SECTION_IDS)[number];
+
+export const HOME_SECTION_LABELS: Record<HomeSectionId, string> = {
+  "coming-up": "Coming up",
+  "dinner-week": "Dinner this week",
+  cravings: "Cravings",
+  "tell-you-later": "Tell you later",
+  seasonal: "Seasonal bucket list",
+  "collection-longterm": "Long-term bucket list",
+  "collection-places": "Places to try",
+  "collection-date": "Date ideas",
+  "collection-dinner": "Dinner ideas",
+  "collection-recipe": "Recipe ideas",
+  "collection-craft": "Craft ideas",
+  "pick-tonight": "Pick for tonight",
+  scrapbook: "Scrapbook",
+};
+
+function isHomeSectionId(value: unknown): value is HomeSectionId {
+  return (
+    typeof value === "string" &&
+    (HOME_SECTION_IDS as readonly string[]).includes(value)
+  );
+}
+
+/** Which home-page sections are shown, and in what order, kept in
+ * localStorage so the choice sticks on this device. Only the visible
+ * order is stored; hidden sections are the ones missing from it. The
+ * saved order is read once on mount (localStorage isn't there during
+ * the server render, so the first paint is the default order, then this
+ * applies). Sections missing from storage — for example one added in a
+ * later version — are appended at the end, in default order. Hiding a
+ * section never deletes anything; it only leaves it out of this list. */
+export function useHomeLayout() {
+  const [order, setOrder] = useState<HomeSectionId[]>([...HOME_SECTION_IDS]);
+  const orderRef = useRef(order);
+  orderRef.current = order;
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(HOME_LAYOUT_KEY);
+      if (raw) {
+        const parsed: unknown = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const ids = parsed.filter(isHomeSectionId);
+          const missing = HOME_SECTION_IDS.filter(
+            (id) => !ids.includes(id),
+          );
+          if (ids.length > 0) setOrder([...ids, ...missing]);
+        }
+      }
+    } catch {
+      // localStorage unavailable or corrupt; the default order stands.
+    }
+  }, []);
+
+  const persist = useCallback((next: HomeSectionId[]) => {
+    orderRef.current = next;
+    setOrder(next);
+    try {
+      window.localStorage.setItem(HOME_LAYOUT_KEY, JSON.stringify(next));
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const moveUp = useCallback(
+    (id: HomeSectionId) => {
+      const current = orderRef.current;
+      const at = current.indexOf(id);
+      if (at <= 0) return;
+      const next = [...current];
+      next[at - 1] = current[at] as HomeSectionId;
+      next[at] = current[at - 1] as HomeSectionId;
+      persist(next);
+    },
+    [persist],
+  );
+
+  const moveDown = useCallback(
+    (id: HomeSectionId) => {
+      const current = orderRef.current;
+      const at = current.indexOf(id);
+      if (at < 0 || at >= current.length - 1) return;
+      const next = [...current];
+      next[at + 1] = current[at] as HomeSectionId;
+      next[at] = current[at + 1] as HomeSectionId;
+      persist(next);
+    },
+    [persist],
+  );
+
+  const hide = useCallback(
+    (id: HomeSectionId) => {
+      persist(orderRef.current.filter((v) => v !== id));
+    },
+    [persist],
+  );
+
+  const show = useCallback(
+    (id: HomeSectionId) => {
+      // A re-shown section goes to the bottom of the visible list;
+      // the arrows can move it from there.
+      if (!orderRef.current.includes(id)) {
+        persist([...orderRef.current, id]);
+      }
+    },
+    [persist],
+  );
+
+  const reset = useCallback(() => {
+    orderRef.current = [...HOME_SECTION_IDS];
+    setOrder([...HOME_SECTION_IDS]);
+    try {
+      window.localStorage.removeItem(HOME_LAYOUT_KEY);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const hidden = HOME_SECTION_IDS.filter((id) => !order.includes(id));
+
+  return {
+    order,
+    hidden,
+    isVisible: useCallback((id: HomeSectionId) => order.includes(id), [order]),
+    indexOf: useCallback((id: HomeSectionId) => order.indexOf(id), [order]),
+    moveUp,
+    moveDown,
+    hide,
+    show,
+    reset,
+  };
+}
+
 export function SectionHeader({
   emoji,
   label,
