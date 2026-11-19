@@ -546,8 +546,20 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
 
             {/* Home sections, in the saved layout order. The wrapper is a
                 flex column so each section can be moved with the `order`
-                style; hiding one just leaves it out. */}
-            <div className="flex flex-col">
+                style; hiding one just leaves it out. In Edit layout mode
+                the container gets a gap between sections and each panel's
+                own top margin is flattened, so the edit bar sits tight
+                against its own section instead of against the one above. */}
+            {editingLayout && (
+              <style>{`.layout-editing > div > section { margin-top: 0.25rem; }`}</style>
+            )}
+            <div
+              className={
+                editingLayout
+                  ? "layout-editing flex flex-col gap-6"
+                  : "flex flex-col"
+              }
+            >
             {layout.isVisible("coming-up") && (
               <div style={{ order: layout.indexOf("coming-up") }}>
                 {editBar("coming-up")}
