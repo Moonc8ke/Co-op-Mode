@@ -202,6 +202,9 @@ sign-in.)
 
 When one of you posts a craving, suggests a dinner, or leaves a
 "Tell you later" note, the other gets a gentle ping on their phone.
+It works the other way too: when one of you marks a craving
+"Got it", answers a dinner suggestion, or marks a note done, the
+person who posted it gets a ping.
 Each phone opts in once from a banner on the home page; saying no
 hides it and never nags. The banner only shows when push can work on
 that phone and no choice has been made yet.
@@ -210,7 +213,7 @@ How it works: the app registers a small service worker that only
 handles notifications (it never caches anything), the phone saves a
 push subscription in the `push_subscriptions` table, and a Supabase
 Edge Function (`supabase/functions/send-push`) sends the ping when a
-new row appears. Scope is v1: only cravings, dinner proposals, and
+new row appears, or when a row is answered or finished. Scope is v1: only cravings, dinner proposals, and
 tell-you-later notes send notifications — bucket-list items, calendar
 events, and scrapbook memories do not.
 
@@ -245,18 +248,24 @@ your Supabase login, in order:
    table. For each of `cravings`, `dinner_proposals`, and
    `tell_you_later`:
    - Name: `send-push-cravings` (and so on for each table)
-   - Table: the table name; Events: **INSERT only**
+   - Table: the table name; Events: **INSERT and UPDATE**
    - Type: HTTP Request, Method: **POST**
    - URL: `https://<your-project-ref>.supabase.co/functions/v1/send-push`
    - HTTP Headers: `Authorization: Bearer <your anon key>` (Project
      Settings → API) and `Content-Type: application/json`
+
+   The function only pings on a real change — a new post, a "Got it",
+   an accept or decline, or a note marked done — so edits and re-saves
+   stay silent. A dinner counter needs no extra setup: the counter is
+   a new suggestion row, so its INSERT already pings the suggester.
 5. **Enable notifications on each phone**: open the app, and tap
    **Enable notifications** on the banner at the top of the home page.
    The browser asks for permission once. On iPhone this only works if
    the app is installed on the Home Screen and the phone runs iOS 16.4
    or later; on Android it works from the installed app in Chrome.
 
-To test it, post a craving from one phone and watch the other. If a
+To test it, post a craving from one phone and watch the other —
+then mark it "Got it" from the second phone and watch the first. If a
 phone stops receiving pings (app uninstalled, permission revoked), the
 Edge Function deletes that phone's subscription the next time it tries
 to send to it, so it never keeps trying a dead device.
