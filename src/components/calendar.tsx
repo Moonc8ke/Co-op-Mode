@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { addEvent, deleteEvent } from "@/lib/data";
+import { addEvent, deleteEvent, setEventDone, updateEvent } from "@/lib/data";
 import { fmtDay, fmtFull, relDay, todayStr } from "@/lib/seasons";
 import type { CalEvent } from "@/lib/types";
 import { DetailDialog, EmptyNote, SectionHeader, sectionPanelStyle } from "./shared";
@@ -15,8 +15,16 @@ export function CalendarSection({
   refresh: () => void;
 }) {
   const today = todayStr();
-  const upcoming = events.filter((e) => e.event_date >= today);
-  const past = events.filter((e) => e.event_date < today);
+  // Done plans leave "coming up" whatever their date is, and show in
+  // their own collapsible list below. is_done is treated as false when
+  // the field is missing (rows read before migration 0008 ran).
+  const upcoming = events.filter(
+    (e) => e.event_date >= today && e.is_done !== true,
+  );
+  const done = events.filter((e) => e.is_done === true);
+  const past = events.filter(
+    (e) => e.event_date < today && e.is_done !== true,
+  );
   return (
     <section
       aria-label="Shared calendar"
@@ -42,6 +50,19 @@ export function CalendarSection({
       )}
 
       <AddEventForm refresh={refresh} />
+
+      {done.length > 0 && (
+        <details className="mt-3">
+          <summary className="cursor-pointer py-1 text-sm font-medium text-[var(--dim)]">
+            ✓ Done plans ({done.length})
+          </summary>
+          <ul className="mt-2 space-y-2">
+            {[...done].reverse().map((e) => (
+              <EventCard key={e.id} event={e} refresh={refresh} />
+            ))}
+          </ul>
+        </details>
+      )}
 
       {past.length > 0 && (
         <details className="mt-3">
@@ -73,7 +94,73 @@ export function EventCard({
   const [showDetail, setShowDetail] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // is_done is missing on rows read before migration 0008 ran; treat
+  // those as not done.
+  const isDone = event.is_done === true;
   const rel = relDay(event.event_date);
+
+  // Edit form state, filled from the event when editing starts.
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDate, setEditDate] = useState("");
+  const [editTime, setEditTime] = useState("");
+  const [editLocation, setEditLocation] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+
+  function startEdit() {
+    setEditTitle(event.title);
+    setEditDate(event.event_date);
+    setEditTime(event.event_time);
+    setEditLocation(event.location);
+    setEditNotes(event.notes);
+    setError("");
+    setEditing(true);
+  }
+
+  async function saveEdit(e: FormEvent) {
+    e.preventDefault();
+    if (!editTitle.trim() || !editDate || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      await updateEvent(supabase, event.id, {
+        title: editTitle.trim(),
+        event_date: editDate,
+        event_time: editTime.trim(),
+        location: editLocation.trim(),
+        notes: editNotes.trim(),
+      });
+      setEditing(false);
+      refresh();
+    } catch {
+      setError("That didn't save. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleDone(next: boolean) {
+    setBusy(true);
+    setError("");
+    try {
+      await setEventDone(supabase, event.id, next);
+      refresh();
+    } catch (err) {
+      // A missing is_done column means migration 0008 hasn't run yet.
+      // Say so plainly instead of showing the database error.
+      const code = (err as { code?: string } | null)?.code;
+      const msg = err instanceof Error ? err.message : "";
+      if (code === "PGRST204" || /is_done/i.test(msg)) {
+        setError(
+          "Marking plans done needs a quick database update first — please run migration 0008 in the Supabase SQL Editor, then try again.",
+        );
+      } else {
+        setError("That didn't save. Please try again.");
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (!showDetail) return;
@@ -122,13 +209,22 @@ export function EventCard({
             </span>
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block font-medium">{event.title}</span>
+            <span
+              className={`block font-medium ${isDone ? "text-[var(--dim)] line-through decoration-2" : ""}`}
+            >
+              {event.title}
+            </span>
             <span className="mt-0.5 block text-sm text-[var(--dim)]">
               {fmtDay(event.event_date)}
               {rel ? ` · ${rel}` : ""}
               {event.event_time ? ` · ${event.event_time}` : ""}
               {event.location ? ` · ${event.location}` : ""}
             </span>
+            {isDone && event.done_at && (
+              <span className="mt-0.5 block text-sm text-[var(--teal)]">
+                ✓ Done {fmtFull(event.done_at.slice(0, 10))}
+              </span>
+            )}
             {event.notes && (
               <span className="mt-0.5 line-clamp-2 block text-sm text-[var(--dim)]">
                 {event.notes}
@@ -214,7 +310,78 @@ export function EventCard({
             </button>
           </div>
 
+          {editing ? (
+            <form onSubmit={saveEdit} className="mt-4 space-y-2">
+              <input
+                aria-label="Plan title"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                placeholder="Plan title"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-base"
+              />
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  type="date"
+                  aria-label="Plan date"
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                  className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-base"
+                />
+                <input
+                  aria-label="Plan time (optional)"
+                  value={editTime}
+                  onChange={(e) => setEditTime(e.target.value)}
+                  placeholder="Time (optional) — e.g. 7pm"
+                  className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm"
+                />
+              </div>
+              <input
+                aria-label="Plan location (optional)"
+                value={editLocation}
+                onChange={(e) => setEditLocation(e.target.value)}
+                placeholder="Where? (optional)"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm"
+              />
+              <input
+                aria-label="Plan notes (optional)"
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                placeholder="Notes (optional) — tickets, what to bring, who's driving"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm"
+              />
+              <div className="flex flex-wrap gap-2 pt-1">
+                <button
+                  type="submit"
+                  disabled={!editTitle.trim() || !editDate || busy}
+                  className="rounded-full bg-[var(--teal)] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
+                >
+                  {busy ? "Saving…" : "Save changes"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditing(false);
+                    setError("");
+                  }}
+                  className="rounded-full border border-[var(--border)] px-4 py-2.5 text-sm font-medium"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          ) : (
           <dl className="mt-4 space-y-3">
+            <div className="rounded-xl bg-[var(--bg)] p-3">
+              <dt className="text-xs font-semibold uppercase tracking-wide text-[var(--dim)]">
+                Status
+              </dt>
+              <dd className="mt-0.5 text-base">
+                {isDone
+                  ? `✓ Done${event.done_at ? ` on ${fmtFull(event.done_at.slice(0, 10))}` : ""} — kept as a memory.`
+                  : "Still coming up."}
+              </dd>
+            </div>
+
             <div className="rounded-xl bg-[var(--bg)] p-3">
               <dt className="text-xs font-semibold uppercase tracking-wide text-[var(--dim)]">
                 When
@@ -268,7 +435,9 @@ export function EventCard({
               </dd>
             </div>
           </dl>
+          )}
 
+          {!editing && (
           <div className="mt-4 flex flex-wrap gap-2">
             <button
               type="button"
@@ -276,6 +445,22 @@ export function EventCard({
               className="rounded-full bg-[var(--teal)] px-5 py-2.5 text-sm font-semibold text-white"
             >
               Close
+            </button>
+            <button
+              type="button"
+              onClick={() => void toggleDone(!isDone)}
+              disabled={busy}
+              className="rounded-full border border-[var(--border)] px-4 py-2.5 text-sm font-medium disabled:opacity-40"
+            >
+              {isDone ? "Move back to plans" : "Mark as done ✓"}
+            </button>
+            <button
+              type="button"
+              aria-label={`Edit plan “${event.title}”`}
+              onClick={startEdit}
+              className="rounded-full border border-[var(--border)] px-4 py-2.5 text-sm font-medium"
+            >
+              Edit
             </button>
             {confirming ? (
               <>
@@ -307,6 +492,7 @@ export function EventCard({
               </button>
             )}
           </div>
+          )}
           {error && (
             <p className="mt-2 text-sm text-[var(--rose)]">{error}</p>
           )}

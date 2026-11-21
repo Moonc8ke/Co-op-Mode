@@ -40,6 +40,11 @@ export interface CalEvent {
   event_time: string;
   location: string;
   notes: string;
+  /** True once the plan has happened and been marked done. Needs
+   * migration 0008_event_done.sql; rows read before it ran have this
+   * field missing, which the UI treats as not done. */
+  is_done: boolean;
+  done_at: string | null;
   created_at: string;
 }
 

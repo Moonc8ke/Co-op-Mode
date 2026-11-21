@@ -264,7 +264,9 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
       ? 0
       : Math.round((seasonDone / seasonItems.length) * 100);
   const today = todayStr();
-  const upcomingEvents = events.filter((e) => e.event_date >= today);
+  const upcomingEvents = events.filter(
+    (e) => e.event_date >= today && e.is_done !== true,
+  );
   const doneCount = items.filter((i) => i.status === "done").length;
 
   // Season-change moment: when the calendar season has moved on since the

@@ -247,6 +247,51 @@ export async function deleteEvent(
   if (error) throw error;
 }
 
+/** Updates a plan's details (title, date, time, location, notes).
+ * Works without any migration — the columns already exist. */
+export async function updateEvent(
+  supabase: SupabaseClient,
+  id: number,
+  args: {
+    title: string;
+    event_date: string;
+    event_time?: string;
+    location?: string;
+    notes?: string;
+  },
+): Promise<void> {
+  const { error } = await supabase
+    .from("events")
+    .update({
+      title: args.title.trim(),
+      event_date: args.event_date,
+      event_time: (args.event_time ?? "").trim(),
+      location: (args.location ?? "").trim(),
+      notes: (args.notes ?? "").trim(),
+    })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+/** Marks a plan done (or moves it back to upcoming). Marking done
+ * stamps done_at with now; undoing clears it. Needs migration
+ * 0008_event_done.sql — without it the update fails because the
+ * is_done column does not exist yet. */
+export async function setEventDone(
+  supabase: SupabaseClient,
+  id: number,
+  done: boolean,
+): Promise<void> {
+  const { error } = await supabase
+    .from("events")
+    .update({
+      is_done: done,
+      done_at: done ? new Date().toISOString() : null,
+    })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 /* ---------------- Dinner proposals ---------------- */
 
 export async function proposeDinner(
@@ -690,13 +735,27 @@ export async function importBackup(
       result.skipped += 1;
       continue;
     }
-    const { error } = await supabase.from("events").insert({
+    const isDone = row.is_done === true;
+    const eventBase = {
       title: row.title.trim().slice(0, 200),
       event_date: row.event_date,
       event_time: typeof row.event_time === "string" ? row.event_time.slice(0, 10) : "",
       location: typeof row.location === "string" ? row.location.slice(0, 200) : "",
       notes: typeof row.notes === "string" ? row.notes.slice(0, 1000) : "",
+    };
+    // Carry the done state when the backup has one. If migration
+    // 0008 hasn't run yet the is_done column doesn't exist, so fall
+    // back to importing the plan without its done state instead of
+    // dropping the whole event.
+    let { error } = await supabase.from("events").insert({
+      ...eventBase,
+      is_done: isDone,
+      done_at:
+        isDone && typeof row.done_at === "string" ? row.done_at : null,
     });
+    if (error && /is_done/.test(error.message ?? "")) {
+      ({ error } = await supabase.from("events").insert(eventBase));
+    }
     if (error) result.skipped += 1;
     else result.events += 1;
   }
