@@ -6,6 +6,7 @@ import { addEvent, deleteEvent, setEventDone, updateEvent } from "@/lib/data";
 import { fmtDay, fmtFull, relDay, todayStr } from "@/lib/seasons";
 import type { CalEvent } from "@/lib/types";
 import { DetailDialog, EmptyNote, SectionHeader, sectionPanelStyle } from "./shared";
+import { useBackLayer } from "@/lib/back-nav";
 
 export function CalendarSection({
   events,
@@ -107,6 +108,16 @@ export function EventCard({
   const [editLocation, setEditLocation] = useState("");
   const [editNotes, setEditNotes] = useState("");
 
+  // Back navigation: the detail is a back step, and the edit form
+  // inside it is another one — back from editing returns to the
+  // details, back from the details closes them. See src/lib/back-nav.ts.
+  const detailNav = useBackLayer("event-detail", showDetail, () =>
+    setShowDetail(false),
+  );
+  const editNav = useBackLayer("event-edit", editing, () =>
+    setEditing(false),
+  );
+
   function startEdit() {
     setEditTitle(event.title);
     setEditDate(event.event_date);
@@ -115,6 +126,7 @@ export function EventCard({
     setEditNotes(event.notes);
     setError("");
     setEditing(true);
+    editNav.open();
   }
 
   async function saveEdit(e: FormEvent) {
@@ -130,7 +142,9 @@ export function EventCard({
         location: editLocation.trim(),
         notes: editNotes.trim(),
       });
-      setEditing(false);
+      // Saving finishes the edit, so unwind the history entry the edit
+      // form pushed when it opened (closeViaUi also closes the form).
+      editNav.closeViaUi();
       refresh();
     } catch {
       setError("That didn't save. Please try again.");
@@ -165,18 +179,26 @@ export function EventCard({
   useEffect(() => {
     if (!showDetail) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setShowDetail(false);
+      // Escape closes the topmost layer: the edit form first, then the
+      // details themselves.
+      if (e.key === "Escape") {
+        if (editing) editNav.closeViaUi();
+        else detailNav.closeViaUi();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [showDetail]);
+  }, [showDetail, editing, detailNav, editNav]);
 
   async function remove() {
     setBusy(true);
     setError("");
     try {
       await deleteEvent(supabase, event.id);
-      setShowDetail(false);
+      // Deleting from inside the detail closes it (and unwinds its
+      // history entry); deleting from the list row just runs the close
+      // with no history to unwind — closeViaUi is safe either way.
+      detailNav.closeViaUi();
       refresh();
     } catch {
       setError("That didn't delete. Please try again.");
@@ -192,7 +214,10 @@ export function EventCard({
       >
         <button
           type="button"
-          onClick={() => setShowDetail(true)}
+          onClick={() => {
+            setShowDetail(true);
+            detailNav.open();
+          }}
           aria-label={`View details for ${event.title}`}
           aria-haspopup="dialog"
           className="flex min-w-0 flex-1 items-start gap-3 rounded-lg text-left"
@@ -269,7 +294,7 @@ export function EventCard({
       {showDetail && (
         <DetailDialog
           label={`Details for ${event.title}`}
-          onClose={() => setShowDetail(false)}
+          onClose={() => detailNav.closeViaUi()}
         >
           <div className="flex items-start gap-3">
             <div className="w-16 shrink-0 rounded-xl bg-[var(--teal-soft)] px-1 py-2 text-center">
@@ -303,7 +328,7 @@ export function EventCard({
             <button
               type="button"
               aria-label="Close event details"
-              onClick={() => setShowDetail(false)}
+              onClick={() => detailNav.closeViaUi()}
               className="shrink-0 rounded-full border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-sm font-medium"
             >
               ✕
@@ -360,7 +385,7 @@ export function EventCard({
                 <button
                   type="button"
                   onClick={() => {
-                    setEditing(false);
+                    editNav.closeViaUi();
                     setError("");
                   }}
                   className="rounded-full border border-[var(--border)] px-4 py-2.5 text-sm font-medium"
@@ -441,7 +466,7 @@ export function EventCard({
           <div className="mt-4 flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => setShowDetail(false)}
+              onClick={() => detailNav.closeViaUi()}
               className="rounded-full bg-[var(--teal)] px-5 py-2.5 text-sm font-semibold text-white"
             >
               Close

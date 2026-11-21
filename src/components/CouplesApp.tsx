@@ -36,6 +36,11 @@ import type {
   Season,
   TellYouLater,
 } from "@/lib/types";
+import {
+  useBackLayer,
+  useBackNavigation,
+  useEdgeSwipeBack,
+} from "@/lib/back-nav";
 import { CategorySection, ItemCard } from "./items";
 import { CalendarSection, EventCard } from "./calendar";
 import { CravingsSection } from "./cravings";
@@ -122,6 +127,22 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [view, setView] = useState<View>("home");
+
+  // Back navigation: the system back gesture and a swipe from the left
+  // edge step back through the views and pop-outs instead of leaving
+  // the app mid-task. The Add and scrapbook views are back layers;
+  // home is the base, so back from home exits the app as usual.
+  // See src/lib/back-nav.ts.
+  useBackNavigation();
+  useEdgeSwipeBack();
+  const addNav = useBackLayer("view:add", view === "add", () =>
+    setView("home"),
+  );
+  const scrapbookNav = useBackLayer(
+    "view:scrapbook",
+    view === "scrapbook",
+    () => setView("home"),
+  );
 
   // Identity: who is signed in. Read from the profiles table on session
   // load, so the dinner and cravings forms already know who's typing.
@@ -440,7 +461,10 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
               </p>
               <button
                 type="button"
-                onClick={() => setView("add")}
+                onClick={() => {
+                  setView("add");
+                  addNav.open();
+                }}
                 className="mt-4 inline-flex items-center gap-2 rounded-full bg-[var(--accent)] px-5 py-2.5 text-base font-semibold text-white shadow-sm"
               >
                 <span aria-hidden className="text-lg leading-none">
@@ -952,7 +976,10 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
               )}
               <button
                 type="button"
-                onClick={() => setView("scrapbook")}
+                onClick={() => {
+                  setView("scrapbook");
+                  scrapbookNav.open();
+                }}
                 className="mt-3 rounded-full bg-[var(--berry)] px-4 py-2 text-sm font-semibold text-[var(--bg)]"
               >
                 {memories.length > 0
@@ -1058,7 +1085,7 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
             <header className="pt-6">
               <button
                 type="button"
-                onClick={() => setView("home")}
+                onClick={() => addNav.closeViaUi()}
                 className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-sm font-semibold"
               >
                 ← Back to what&apos;s coming up
@@ -1118,7 +1145,7 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
             <p className="mt-10 text-center">
               <button
                 type="button"
-                onClick={() => setView("home")}
+                onClick={() => addNav.closeViaUi()}
                 className="rounded-full bg-[var(--accent)] px-5 py-2.5 text-sm font-semibold text-white"
               >
                 ← Done — back to what&apos;s coming up
@@ -1133,7 +1160,7 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
             <header className="pt-6">
               <button
                 type="button"
-                onClick={() => setView("home")}
+                onClick={() => scrapbookNav.closeViaUi()}
                 className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-sm font-semibold"
               >
                 ← Back to what&apos;s coming up
@@ -1143,7 +1170,7 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
             <p className="mt-10 text-center">
               <button
                 type="button"
-                onClick={() => setView("home")}
+                onClick={() => scrapbookNav.closeViaUi()}
                 className="rounded-full bg-[var(--accent)] px-5 py-2.5 text-sm font-semibold text-white"
               >
                 ← Done — back to what&apos;s coming up

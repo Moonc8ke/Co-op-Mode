@@ -6,6 +6,7 @@ import { addMemory, deleteMemory } from "@/lib/data";
 import { fmtFull, todayStr } from "@/lib/seasons";
 import type { Memory } from "@/lib/types";
 import { EmptyNote, SectionHeader, sectionPanelStyle } from "./shared";
+import { useBackLayer } from "@/lib/back-nav";
 
 const ROTATIONS = ["-rotate-2", "rotate-1", "-rotate-1", "rotate-2", "rotate-0"];
 
@@ -26,6 +27,12 @@ export function ScrapbookSection({
   const [formError, setFormError] = useState("");
   const [pending, setPending] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // Back navigation: the enlarged memory is a back step (see
+  // src/lib/back-nav.ts).
+  const viewerNav = useBackLayer("memory-view", selected !== null, () =>
+    setSelected(null),
+  );
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -73,7 +80,7 @@ export function ScrapbookSection({
     setDeleting(true);
     try {
       await deleteMemory(supabase, selected.id);
-      setSelected(null);
+      viewerNav.closeViaUi();
       refresh();
     } finally {
       setDeleting(false);
@@ -84,11 +91,11 @@ export function ScrapbookSection({
   useEffect(() => {
     if (!selected) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setSelected(null);
+      if (e.key === "Escape") viewerNav.closeViaUi();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selected]);
+  }, [selected, viewerNav]);
 
   const rotations = useMemo(() => ROTATIONS, []);
 
@@ -119,7 +126,10 @@ export function ScrapbookSection({
               key={m.id}
               type="button"
               aria-label={`View memory: ${m.caption || fmtFull(m.memory_date)}`}
-              onClick={() => setSelected(m)}
+              onClick={() => {
+                setSelected(m);
+                viewerNav.open();
+              }}
               className={`tape relative bg-white p-2 pb-3 text-left shadow-md transition-transform ${rotations[idx % rotations.length] ?? ""}`}
             >
               {m.image_url ? (
@@ -232,7 +242,7 @@ export function ScrapbookSection({
           aria-modal="true"
           aria-label="Memory, enlarged"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-          onClick={() => setSelected(null)}
+          onClick={() => viewerNav.closeViaUi()}
         >
           <div
             className="tape relative max-h-full w-full max-w-md overflow-auto bg-white p-3 pb-4 shadow-xl"
@@ -266,7 +276,7 @@ export function ScrapbookSection({
             <div className="mt-3 flex gap-2 px-1">
               <button
                 type="button"
-                onClick={() => setSelected(null)}
+                onClick={() => viewerNav.closeViaUi()}
                 className="rounded-full border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700"
               >
                 Close

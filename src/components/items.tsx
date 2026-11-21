@@ -11,6 +11,7 @@ import { CATEGORY_META, SEASONAL_SUGGESTIONS, SUGGESTIONS } from "@/lib/suggesti
 import { fmtFull, SEASONS, seasonFor, SEASON_EMOJI } from "@/lib/seasons";
 import type { Category, Item, Season } from "@/lib/types";
 import { DetailDialog, EmptyNote, SectionHeader, sectionPanelStyle } from "./shared";
+import { useBackLayer } from "@/lib/back-nav";
 
 export function CategorySection({
   category,
@@ -186,14 +187,19 @@ export function ItemCard({
   const [busy, setBusy] = useState(false);
   const isDone = item.status === "done";
 
+  // Back navigation: the detail is a back step (see src/lib/back-nav.ts).
+  const detailNav = useBackLayer("item-detail", showDetail, () =>
+    setShowDetail(false),
+  );
+
   useEffect(() => {
     if (!showDetail) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setShowDetail(false);
+      if (e.key === "Escape") detailNav.closeViaUi();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [showDetail]);
+  }, [showDetail, detailNav]);
 
   async function toggleDone(checked: boolean) {
     setBusy(true);
@@ -209,7 +215,10 @@ export function ItemCard({
     setBusy(true);
     try {
       await deleteItem(supabase, item.id);
-      setShowDetail(false);
+      // Same shared-delete shape as calendar events: closing from
+      // inside the detail unwinds its history entry; deleting from
+      // the list row just runs the close with nothing to unwind.
+      detailNav.closeViaUi();
       refresh();
     } finally {
       setBusy(false);
@@ -233,7 +242,10 @@ export function ItemCard({
         />
         <button
           type="button"
-          onClick={() => setShowDetail(true)}
+          onClick={() => {
+            setShowDetail(true);
+            detailNav.open();
+          }}
           aria-label={`View details for ${item.title}`}
           aria-haspopup="dialog"
           className="min-w-0 flex-1 rounded-lg text-left"
@@ -294,7 +306,7 @@ export function ItemCard({
       {showDetail && (
         <DetailDialog
           label={`Details for ${item.title}`}
-          onClose={() => setShowDetail(false)}
+          onClose={() => detailNav.closeViaUi()}
         >
           <div className="flex items-start gap-3">
             <span
@@ -320,7 +332,7 @@ export function ItemCard({
             <button
               type="button"
               aria-label="Close details"
-              onClick={() => setShowDetail(false)}
+              onClick={() => detailNav.closeViaUi()}
               className="shrink-0 rounded-full border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-sm font-medium"
             >
               ✕
@@ -363,7 +375,7 @@ export function ItemCard({
           <div className="mt-4 flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => setShowDetail(false)}
+              onClick={() => detailNav.closeViaUi()}
               className="rounded-full px-5 py-2.5 text-sm font-semibold text-white"
               style={{ background: meta.color }}
             >
