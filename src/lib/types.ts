@@ -17,6 +17,9 @@ export type Person = "Andrew" | "Juliette";
 export interface Profile {
   id: string;
   display_name: Person;
+  /** The Relationship Space this account belongs to. Null until the
+   * account is assigned a space (migration 0007). */
+  space_id: string | null;
   created_at: string;
 }
 
@@ -30,6 +33,8 @@ export interface Item {
   season: Season | null;
   status: ItemStatus;
   done_at: string | null;
+  /** The Relationship Space this row belongs to (migration 0007). */
+  space_id: string | null;
   created_at: string;
 }
 
@@ -45,6 +50,8 @@ export interface CalEvent {
    * field missing, which the UI treats as not done. */
   is_done: boolean;
   done_at: string | null;
+  /** The Relationship Space this row belongs to (migration 0007). */
+  space_id: string | null;
   created_at: string;
 }
 
@@ -63,6 +70,8 @@ export interface DinnerProposal {
   dinner_date: string | null;
   created_at: string;
   responded_at: string | null;
+  /** The Relationship Space this row belongs to (migration 0007). */
+  space_id: string | null;
 }
 
 export interface Memory {
@@ -73,6 +82,8 @@ export interface Memory {
    * backup that had no photo (the prototype's export has no photo bytes). */
   image_url: string | null;
   mime_type: string | null;
+  /** The Relationship Space this row belongs to (migration 0007). */
+  space_id: string | null;
   created_at: string;
 }
 
@@ -91,6 +102,8 @@ export interface Craving {
   fulfilled_note: string;
   created_at: string;
   fulfilled_at: string | null;
+  /** The Relationship Space this row belongs to (migration 0007). */
+  space_id: string | null;
 }
 
 export type TellYouLaterKind = "tell" | "do" | "news";
@@ -105,6 +118,8 @@ export interface TellYouLater {
   done_by: Person | null;
   created_at: string;
   done_at: string | null;
+  /** The Relationship Space this row belongs to (migration 0007). */
+  space_id: string | null;
 }
 
 /** The JSON backup format. Identical to the prototype's export so a backup

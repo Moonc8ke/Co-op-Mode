@@ -42,8 +42,35 @@ export async function getMyProfile(
   return data as Profile | null;
 }
 
+/** The signed-in user's space id, read from their profiles row and
+ * cached once per session (keyed by auth user id, so signing in as
+ * someone else re-reads it). Null when the account has no space yet.
+ * Needs migration 0007_spaces.sql — before it ran, profiles has no
+ * space_id column and this returns null. Reading the row works under
+ * the new policies because the row's own space_id equals
+ * my_space_id(). */
+let cachedSpaceId: { userId: string; spaceId: string | null } | null = null;
+
+export async function getMySpaceId(
+  supabase: SupabaseClient,
+): Promise<string | null> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  if (cachedSpaceId?.userId === user.id) return cachedSpaceId.spaceId;
+  const profile = await getMyProfile(supabase);
+  const spaceId = profile?.space_id ?? null;
+  cachedSpaceId = { userId: user.id, spaceId };
+  return spaceId;
+}
+
 /** Saves (or changes) the signed-in account's name. Upserts by the
- * auth user id, so switching names later just overwrites the one row. */
+ * auth user id, so switching names later just overwrites the one row.
+ * Includes the user's space_id, or the upsert fails the new profiles
+ * policy's WITH CHECK (space_id = my_space_id()) from migration 0007.
+ * A brand-new account with no space yet cannot save a name — it needs
+ * a space assigned in SQL first (Phase 2 adds the invite flow). */
 export async function setMyProfile(
   supabase: SupabaseClient,
   displayName: Person,
@@ -55,6 +82,7 @@ export async function setMyProfile(
   const { error } = await supabase.from("profiles").upsert({
     id: user.id,
     display_name: displayName,
+    space_id: await getMySpaceId(supabase),
   });
   if (error) throw error;
 }
@@ -62,18 +90,22 @@ export async function setMyProfile(
 /* ---------------- Reads ---------------- */
 
 export async function listItems(supabase: SupabaseClient): Promise<Item[]> {
+  const spaceId = await getMySpaceId(supabase);
   const { data, error } = await supabase
     .from("items")
     .select("*")
+    .eq("space_id", spaceId)
     .order("id", { ascending: true });
   if (error) throw error;
   return data as Item[];
 }
 
 export async function listEvents(supabase: SupabaseClient): Promise<CalEvent[]> {
+  const spaceId = await getMySpaceId(supabase);
   const { data, error } = await supabase
     .from("events")
     .select("*")
+    .eq("space_id", spaceId)
     .order("event_date", { ascending: true })
     .order("event_time", { ascending: true });
   if (error) throw error;
@@ -83,9 +115,11 @@ export async function listEvents(supabase: SupabaseClient): Promise<CalEvent[]> 
 export async function listDinnerProposals(
   supabase: SupabaseClient,
 ): Promise<DinnerProposal[]> {
+  const spaceId = await getMySpaceId(supabase);
   const { data, error } = await supabase
     .from("dinner_proposals")
     .select("*")
+    .eq("space_id", spaceId)
     .order("dinner_date", { ascending: true, nullsFirst: false })
     .order("id", { ascending: false });
   if (error) throw error;
@@ -101,6 +135,7 @@ function memoryFromRow(
     id: row.id as number,
     caption: (row.caption as string) ?? "",
     memory_date: row.memory_date as string,
+    space_id: (row.space_id as string | null) ?? null,
     image_url: path
       ? supabase.storage.from(SCRAPBOOK_BUCKET).getPublicUrl(path).data.publicUrl
       : null,
@@ -112,9 +147,11 @@ function memoryFromRow(
 export async function listMemories(
   supabase: SupabaseClient,
 ): Promise<Memory[]> {
+  const spaceId = await getMySpaceId(supabase);
   const { data, error } = await supabase
     .from("memories")
     .select("*")
+    .eq("space_id", spaceId)
     .order("memory_date", { ascending: false })
     .order("id", { ascending: false });
   if (error) throw error;
@@ -126,9 +163,11 @@ export async function listMemories(
 export async function listCravings(
   supabase: SupabaseClient,
 ): Promise<Craving[]> {
+  const spaceId = await getMySpaceId(supabase);
   const { data, error } = await supabase
     .from("cravings")
     .select("*")
+    .eq("space_id", spaceId)
     .order("id", { ascending: false });
   if (error) throw error;
   return data as Craving[];
@@ -137,9 +176,11 @@ export async function listCravings(
 export async function listTellYouLater(
   supabase: SupabaseClient,
 ): Promise<TellYouLater[]> {
+  const spaceId = await getMySpaceId(supabase);
   const { data, error } = await supabase
     .from("tell_you_later")
     .select("*")
+    .eq("space_id", spaceId)
     .order("created_at", { ascending: false });
   if (error) throw error;
   return data as TellYouLater[];
@@ -163,6 +204,7 @@ export async function addItem(
       title: args.title.trim(),
       notes: (args.notes ?? "").trim(),
       season: args.category === "seasonal" ? (args.season ?? null) : null,
+      space_id: await getMySpaceId(supabase),
     })
     .select("id")
     .single();
@@ -232,6 +274,7 @@ export async function addEvent(
       event_time: (args.event_time ?? "").trim(),
       location: (args.location ?? "").trim(),
       notes: (args.notes ?? "").trim(),
+      space_id: await getMySpaceId(supabase),
     })
     .select("id")
     .single();
@@ -302,6 +345,10 @@ export async function proposeDinner(
     suggested_by: Person;
     /** The night this dinner is for (YYYY-MM-DD), or null for no day. */
     dinner_date?: string | null;
+    /** Space to tag the proposal with. Defaults to the signed-in
+     * user's own space; the counter path passes the original
+     * proposal's space instead. */
+    space_id?: string | null;
   },
 ): Promise<number> {
   const { data, error } = await supabase
@@ -312,6 +359,7 @@ export async function proposeDinner(
       suggested_by: args.suggested_by,
       status: "pending",
       dinner_date: args.dinner_date ?? null,
+      space_id: args.space_id ?? (await getMySpaceId(supabase)),
     })
     .select("id")
     .single();
@@ -359,7 +407,7 @@ export async function counterDinnerProposal(
 ): Promise<number> {
   const { data, error } = await supabase
     .from("dinner_proposals")
-    .select("status, dinner_date")
+    .select("status, dinner_date, space_id")
     .eq("id", id)
     .single();
   if (error) throw error;
@@ -380,6 +428,7 @@ export async function counterDinnerProposal(
     notes: args.notes,
     suggested_by: me,
     dinner_date: (data.dinner_date as string | null) ?? null,
+    space_id: (data.space_id as string | null) ?? null,
   }).then(async (newId) => {
     const { error: linkError } = await supabase
       .from("dinner_proposals")
@@ -420,6 +469,7 @@ export async function addCraving(
       note: (args.note ?? "").trim(),
       wanted_by: args.wanted_by,
       status: "open",
+      space_id: await getMySpaceId(supabase),
     })
     .select("id")
     .single();
@@ -483,6 +533,7 @@ export async function addTellYouLater(
       note: (args.note ?? "").trim(),
       wanted_by: args.wanted_by,
       is_done: false,
+      space_id: await getMySpaceId(supabase),
     })
     .select("id")
     .single();
@@ -582,6 +633,7 @@ export async function addMemory(
       memory_date: args.memory_date,
       storage_path: path,
       mime_type: mimeType,
+      space_id: await getMySpaceId(supabase),
     })
     .select("id")
     .single();
