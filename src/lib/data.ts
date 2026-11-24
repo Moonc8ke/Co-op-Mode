@@ -70,6 +70,41 @@ export async function getMySpaceId(
   return spaceId;
 }
 
+/** Friendly message shown when a name is already taken in the space.
+ * Thrown by setMyProfile and surfaced verbatim by the identity
+ * pickers (full modal and mini chooser), so the user can pick another
+ * name instead of seeing a raw database error. */
+export const NAME_TAKEN_MESSAGE =
+  "That name's already taken in your space, try another one";
+
+/** True when another member of the signed-in user's space already
+ * uses this name (compared case-insensitively, trimmed). The user's
+ * own current name doesn't count — re-saving it is fine. Returns
+ * false when the account has no space yet (nothing to compare
+ * against) or the lookup fails; the unique index from migration
+ * 0010 is the backstop in that case. */
+export async function isNameTaken(
+  supabase: SupabaseClient,
+  candidate: string,
+): Promise<boolean> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return false;
+  const spaceId = await getMySpaceId(supabase);
+  if (!spaceId) return false;
+  const wanted = candidate.trim().toLowerCase();
+  if (!wanted) return false;
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, display_name")
+    .eq("space_id", spaceId);
+  if (error || !data) return false;
+  return (data as Array<{ id: string; display_name: string }>).some(
+    (p) => p.id !== user.id && p.display_name.toLowerCase() === wanted,
+  );
+}
+
 /** Saves (or changes) the signed-in account's name. Upserts by the
  * auth user id, so changing names later just overwrites the one row.
  * Includes the user's space_id, or the upsert fails the new profiles
@@ -77,7 +112,10 @@ export async function getMySpaceId(
  * A brand-new account with no space yet cannot save a name — it needs
  * a space assigned in SQL first (an invite flow is still to come).
  * Names are free-form since migration 0009 — any name, any number of
- * people per space. */
+ * people per space — and unique within a space since migration 0010:
+ * a name another member already uses is rejected here, and the
+ * unique index is the backstop if two people pick the same name at
+ * the same moment. */
 export async function setMyProfile(
   supabase: SupabaseClient,
   displayName: Person,
@@ -88,12 +126,26 @@ export async function setMyProfile(
   if (!user) throw new Error("You need to be signed in.");
   const name = displayName.trim();
   if (!name) throw new Error("Please enter a name first.");
+  if (await isNameTaken(supabase, name)) {
+    throw new Error(NAME_TAKEN_MESSAGE);
+  }
   const { error } = await supabase.from("profiles").upsert({
     id: user.id,
     display_name: name,
     space_id: await getMySpaceId(supabase),
   });
-  if (error) throw error;
+  if (error) {
+    // Race backstop: two people picking the same name at the same
+    // moment both pass the check above, and the unique index rejects
+    // the second save. Say so plainly instead of the raw error.
+    if (
+      error.code === "23505" ||
+      /duplicate key value/i.test(error.message ?? "")
+    ) {
+      throw new Error(NAME_TAKEN_MESSAGE);
+    }
+    throw error;
+  }
 }
 
 /** The signed-in user's space name (e.g. "Andrew & Juliette"), or

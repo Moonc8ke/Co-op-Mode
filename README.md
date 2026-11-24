@@ -307,10 +307,11 @@ you want them back in the scrapbook.
   check). The app reads it on sign-in; dinner suggestions and cravings
   are posted as that person, and accept/decline/counter/"Got it" are
   recorded as that person too. Older dinner and craving rows keep the
-  names they were saved with. Nothing stops two accounts picking the
-  same name — if that happens, one of you can fix it by deleting that
-  row from the `profiles` table in Supabase (Table Editor) and picking
-  again on the next sign-in.
+  names they were saved with. Names are unique within a space since
+  migration 0010: the picker refuses a name another member already
+  uses (compared without caring about upper/lower case), and a unique
+  index in the database backs that up. Two different spaces may still
+  reuse the same name.
 - **Photos:** Scrapbook photos live in the `scrapbook-photos` storage
   bucket (public for viewing, so they render with a plain `<img>` tag;
   only signed-in users can upload or delete). Photo URLs include a

@@ -16,6 +16,7 @@ import {
   listMemories,
   listTellYouLater,
   setMyProfile,
+  NAME_TAKEN_MESSAGE,
   type ImportResult,
 } from "@/lib/data";
 import { CATEGORY_META } from "@/lib/suggestions";
@@ -234,9 +235,14 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
       setMe(person);
       setIdentityModal(null);
       setIdentityError("");
-    } catch {
+    } catch (err) {
+      // The "name taken" message is written for the user, so show it
+      // verbatim in the picker; anything else keeps the generic hint,
+      // since a raw database error is no help here.
       setIdentityError(
-        "That didn't save. If migration 0003 hasn't run in Supabase yet, run it first, then try again.",
+        err instanceof Error && err.message === NAME_TAKEN_MESSAGE
+          ? err.message
+          : "That didn't save. If migration 0003 hasn't run in Supabase yet, run it first, then try again.",
       );
     } finally {
       setIdentitySaving(false);

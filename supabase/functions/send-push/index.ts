@@ -24,7 +24,8 @@
 //   1. The webhook posts the changed row (and, for UPDATEs, the row
 //      as it was before). The poster / responder is a display name
 //      from the row itself — names are free-form since migration
-//      0009, and a space can hold any number of people.
+//      0009, unique within a space since migration 0010, and a space
+//      can hold any number of people.
 //   2. The function reads the row's space_id and looks up that
 //      space's profiles (service role key, so it can read across
 //      accounts). For a new post the recipients are all members
@@ -276,9 +277,9 @@ Deno.serve(async (req: Request) => {
   // Map display names to user ids. For a new post, everyone in the
   // space except the poster; for a reply, the original poster only.
   // A member who hasn't picked a name yet has no profile row and
-  // simply isn't notified. Matching is by name, so two members who
-  // pick the same name both get the ping — the app shows names on
-  // posts, so that is the honest reading of "who posted".
+  // simply isn't notified. Matching is by name, and names are unique
+  // within a space since migration 0010, so each name maps to exactly
+  // one member and the ping is unambiguous.
   const isInsert = payload.type === "INSERT";
   const recipientIds = (
     profiles as Array<{ id: string; display_name: string }>
