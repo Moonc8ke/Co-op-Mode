@@ -7,6 +7,7 @@ import {
   carryOverItems,
   downloadBackup,
   getMyProfile,
+  getMySpaceId,
   getMySpaceName,
   importBackup,
   listCravings,
@@ -17,6 +18,7 @@ import {
   listTellYouLater,
   setMyProfile,
   NAME_TAKEN_MESSAGE,
+  NO_SPACE_MESSAGE,
   type ImportResult,
 } from "@/lib/data";
 import { CATEGORY_META } from "@/lib/suggestions";
@@ -153,6 +155,10 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
   // The space's display name for the header (e.g. "Andrew & Juliette").
   // Null until loaded, or when the account has no space yet.
   const [spaceName, setSpaceName] = useState<string | null>(null);
+  // Whether the account belongs to a space yet. Null until the
+  // identity load has run; false for a spaceless account, which
+  // can't save a name and sees empty lists.
+  const [hasSpace, setHasSpace] = useState<boolean | null>(null);
   const [identityModal, setIdentityModal] = useState<
     "first-run" | "edit-name" | null
   >(null);
@@ -202,6 +208,15 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
         identityPromptedRef.current = true;
         setIdentityModal("first-run");
       }
+      // Whether the account belongs to a space yet. A spaceless
+      // account can't save a name (migration 0007's WITH CHECK
+      // rejects a null space_id), so the picker says so up front
+      // instead of failing only on save.
+      try {
+        setHasSpace((await getMySpaceId(supabase)) !== null);
+      } catch {
+        setHasSpace(null);
+      }
       // The space name is separate from the profile: it comes from the
       // spaces table, and a missing one just falls back to "Our book"
       // in the header.
@@ -237,13 +252,27 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
       setIdentityError("");
     } catch (err) {
       // The "name taken" message is written for the user, so show it
-      // verbatim in the picker; anything else keeps the generic hint,
-      // since a raw database error is no help here.
-      setIdentityError(
-        err instanceof Error && err.message === NAME_TAKEN_MESSAGE
-          ? err.message
-          : "That didn't save. If migration 0003 hasn't run in Supabase yet, run it first, then try again.",
-      );
+      // verbatim in the picker. A spaceless account can't save a name
+      // at all — the profiles upsert fails migration 0007's WITH
+      // CHECK, which null never satisfies — so say that plainly
+      // instead of blaming migration 0003, which has run. Anything
+      // else keeps the generic hint, since a raw database error is
+      // no help here.
+      if (err instanceof Error && err.message === NAME_TAKEN_MESSAGE) {
+        setIdentityError(err.message);
+      } else {
+        let noSpace = false;
+        try {
+          noSpace = (await getMySpaceId(supabase)) === null;
+        } catch {
+          noSpace = false;
+        }
+        setIdentityError(
+          noSpace
+            ? NO_SPACE_MESSAGE
+            : "That didn't save. If migration 0003 hasn't run in Supabase yet, run it first, then try again.",
+        );
+      }
     } finally {
       setIdentitySaving(false);
     }
@@ -1222,6 +1251,7 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
           <IdentityPickerModal
             saving={identitySaving}
             error={identityError}
+            noSpace={hasSpace === false}
             initialName={
               identityModal === "edit-name" ? (me ?? "") : ""
             }

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Person } from "@/lib/types";
+import { NO_SPACE_MESSAGE } from "@/lib/data";
 import { DetailDialog } from "./shared";
 
 /** The one-time "Who are you?" picker. Shown the first time someone
@@ -16,12 +17,16 @@ import { DetailDialog } from "./shared";
 export function IdentityPickerModal({
   saving,
   error,
+  noSpace = false,
   initialName = "",
   onPick,
   onDismiss,
 }: {
   saving: boolean;
   error: string;
+  /** True when the account has no space yet — saving a name can't
+   * work, so the picker says so up front instead of failing on save. */
+  noSpace?: boolean;
   /** Prefilled when the picker is opened to change a saved name. */
   initialName?: string;
   onPick: (person: Person) => void;
@@ -67,6 +72,11 @@ export function IdentityPickerModal({
           autoFocus
           className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-base"
         />
+        {noSpace && (
+          <p className="text-sm leading-relaxed text-[var(--dim)]">
+            {NO_SPACE_MESSAGE}
+          </p>
+        )}
         <button
           type="submit"
           disabled={saving || !trimmed}

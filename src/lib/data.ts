@@ -77,6 +77,13 @@ export async function getMySpaceId(
 export const NAME_TAKEN_MESSAGE =
   "That name's already taken in your space, try another one";
 
+/** Shown when saving a name fails because the account isn't part of
+ * a space yet (no profiles row, so no space_id). The profiles
+ * upsert fails migration 0007's WITH CHECK — null never satisfies
+ * it — so the account needs a space assigned in SQL first. */
+export const NO_SPACE_MESSAGE =
+  "This account isn't part of a space yet. Ask the person who shared the app with you to add it, then try again.";
+
 /** True when another member of the signed-in user's space already
  * uses this name (compared case-insensitively, trimmed). The user's
  * own current name doesn't count — re-saving it is fine. Returns
@@ -169,6 +176,11 @@ export async function getMySpaceName(
 
 export async function listItems(supabase: SupabaseClient): Promise<Item[]> {
   const spaceId = await getMySpaceId(supabase);
+  // A spaceless account has no rows by definition. Return early:
+  // `.eq("space_id", null)` sends `space_id=eq.null`, which
+  // PostgREST rejects, so querying here would throw and the home
+  // page would show its load-error banner.
+  if (!spaceId) return [];
   const { data, error } = await supabase
     .from("items")
     .select("*")
@@ -180,6 +192,11 @@ export async function listItems(supabase: SupabaseClient): Promise<Item[]> {
 
 export async function listEvents(supabase: SupabaseClient): Promise<CalEvent[]> {
   const spaceId = await getMySpaceId(supabase);
+  // A spaceless account has no rows by definition. Return early:
+  // `.eq("space_id", null)` sends `space_id=eq.null`, which
+  // PostgREST rejects, so querying here would throw and the home
+  // page would show its load-error banner.
+  if (!spaceId) return [];
   const { data, error } = await supabase
     .from("events")
     .select("*")
@@ -194,6 +211,11 @@ export async function listDinnerProposals(
   supabase: SupabaseClient,
 ): Promise<DinnerProposal[]> {
   const spaceId = await getMySpaceId(supabase);
+  // A spaceless account has no rows by definition. Return early:
+  // `.eq("space_id", null)` sends `space_id=eq.null`, which
+  // PostgREST rejects, so querying here would throw and the home
+  // page would show its load-error banner.
+  if (!spaceId) return [];
   const { data, error } = await supabase
     .from("dinner_proposals")
     .select("*")
@@ -226,6 +248,11 @@ export async function listMemories(
   supabase: SupabaseClient,
 ): Promise<Memory[]> {
   const spaceId = await getMySpaceId(supabase);
+  // A spaceless account has no rows by definition. Return early:
+  // `.eq("space_id", null)` sends `space_id=eq.null`, which
+  // PostgREST rejects, so querying here would throw and the home
+  // page would show its load-error banner.
+  if (!spaceId) return [];
   const { data, error } = await supabase
     .from("memories")
     .select("*")
@@ -242,6 +269,11 @@ export async function listCravings(
   supabase: SupabaseClient,
 ): Promise<Craving[]> {
   const spaceId = await getMySpaceId(supabase);
+  // A spaceless account has no rows by definition. Return early:
+  // `.eq("space_id", null)` sends `space_id=eq.null`, which
+  // PostgREST rejects, so querying here would throw and the home
+  // page would show its load-error banner.
+  if (!spaceId) return [];
   const { data, error } = await supabase
     .from("cravings")
     .select("*")
@@ -255,6 +287,11 @@ export async function listTellYouLater(
   supabase: SupabaseClient,
 ): Promise<TellYouLater[]> {
   const spaceId = await getMySpaceId(supabase);
+  // A spaceless account has no rows by definition. Return early:
+  // `.eq("space_id", null)` sends `space_id=eq.null`, which
+  // PostgREST rejects, so querying here would throw and the home
+  // page would show its load-error banner.
+  if (!spaceId) return [];
   const { data, error } = await supabase
     .from("tell_you_later")
     .select("*")
