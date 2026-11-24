@@ -21,6 +21,11 @@ export const SCRAPBOOK_BUCKET = "scrapbook-photos";
 const isValidDate = (s: unknown): s is string =>
   typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
 
+/** A name from a backup row: any non-empty string (free-form since
+ * migration 0009), trimmed, or null when the value isn't usable. */
+const asName = (v: unknown): string | null =>
+  typeof v === "string" && v.trim() ? v.trim().slice(0, 40) : null;
+
 /* ---------------- Profile (who is signed in) ---------------- */
 
 /** Reads the signed-in account's profile row, or null when they have not
@@ -66,11 +71,13 @@ export async function getMySpaceId(
 }
 
 /** Saves (or changes) the signed-in account's name. Upserts by the
- * auth user id, so switching names later just overwrites the one row.
+ * auth user id, so changing names later just overwrites the one row.
  * Includes the user's space_id, or the upsert fails the new profiles
  * policy's WITH CHECK (space_id = my_space_id()) from migration 0007.
  * A brand-new account with no space yet cannot save a name — it needs
- * a space assigned in SQL first (Phase 2 adds the invite flow). */
+ * a space assigned in SQL first (an invite flow is still to come).
+ * Names are free-form since migration 0009 — any name, any number of
+ * people per space. */
 export async function setMyProfile(
   supabase: SupabaseClient,
   displayName: Person,
@@ -79,12 +86,31 @@ export async function setMyProfile(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) throw new Error("You need to be signed in.");
+  const name = displayName.trim();
+  if (!name) throw new Error("Please enter a name first.");
   const { error } = await supabase.from("profiles").upsert({
     id: user.id,
-    display_name: displayName,
+    display_name: name,
     space_id: await getMySpaceId(supabase),
   });
   if (error) throw error;
+}
+
+/** The signed-in user's space name (e.g. "Andrew & Juliette"), or
+ * null when the account has no space yet. The spaces table's select
+ * policy lets a member read their own space's row. */
+export async function getMySpaceName(
+  supabase: SupabaseClient,
+): Promise<string | null> {
+  const spaceId = await getMySpaceId(supabase);
+  if (!spaceId) return null;
+  const { data, error } = await supabase
+    .from("spaces")
+    .select("name")
+    .eq("id", spaceId)
+    .maybeSingle();
+  if (error) throw error;
+  return (data?.name as string | null) ?? null;
 }
 
 /* ---------------- Reads ---------------- */
@@ -369,7 +395,7 @@ export async function proposeDinner(
 
 /** Records the logged-in person's reply to a pending suggestion.
  * `me` is who is answering (the app knows this from their profile);
- * the other person is the one who suggested it. */
+ * who suggested it is recorded on the proposal itself. */
 export async function respondToDinnerProposal(
   supabase: SupabaseClient,
   id: number,
@@ -836,10 +862,11 @@ export async function importBackup(
   const pendingLinks: Array<{ newId: number; oldCounterOf: number }> = [];
   for (const r of rawProposals) {
     const row = r as Record<string, unknown>;
+    const suggestedBy = asName(row.suggested_by);
     if (
       typeof row.title !== "string" ||
       !row.title.trim() ||
-      (row.suggested_by !== "Andrew" && row.suggested_by !== "Juliette")
+      !suggestedBy
     ) {
       result.skipped += 1;
       continue;
@@ -855,12 +882,9 @@ export async function importBackup(
       .insert({
         title: row.title.trim().slice(0, 200),
         notes: typeof row.notes === "string" ? row.notes.slice(0, 1000) : "",
-        suggested_by: row.suggested_by,
+        suggested_by: suggestedBy,
         status,
-        responded_by:
-          row.responded_by === "Andrew" || row.responded_by === "Juliette"
-            ? row.responded_by
-            : null,
+        responded_by: asName(row.responded_by),
         responded_at:
           typeof row.responded_at === "string" ? row.responded_at : null,
         dinner_date: isValidDate(row.dinner_date) ? row.dinner_date : null,
@@ -917,11 +941,12 @@ export async function importBackup(
   const rawCravings = Array.isArray(raw.cravings) ? raw.cravings : [];
   for (const r of rawCravings) {
     const row = r as Record<string, unknown>;
+    const wantedBy = asName(row.wanted_by);
     if (
       typeof row.title !== "string" ||
       !row.title.trim() ||
       (row.kind !== "craving" && row.kind !== "looking_for") ||
-      (row.wanted_by !== "Andrew" && row.wanted_by !== "Juliette")
+      !wantedBy
     ) {
       result.skipped += 1;
       continue;
@@ -931,12 +956,9 @@ export async function importBackup(
       title: row.title.trim().slice(0, 200),
       kind: row.kind,
       note: typeof row.note === "string" ? row.note.slice(0, 1000) : "",
-      wanted_by: row.wanted_by,
+      wanted_by: wantedBy,
       status,
-      fulfilled_by:
-        row.fulfilled_by === "Andrew" || row.fulfilled_by === "Juliette"
-          ? row.fulfilled_by
-          : null,
+      fulfilled_by: asName(row.fulfilled_by),
       fulfilled_note:
         typeof row.fulfilled_note === "string"
           ? row.fulfilled_note.slice(0, 1000)
@@ -959,11 +981,12 @@ export async function importBackup(
     : [];
   for (const r of rawTellYouLater) {
     const row = r as Record<string, unknown>;
+    const wantedBy = asName(row.wanted_by);
     if (
       typeof row.text !== "string" ||
       !row.text.trim() ||
       (row.kind !== "tell" && row.kind !== "do" && row.kind !== "news") ||
-      (row.wanted_by !== "Andrew" && row.wanted_by !== "Juliette")
+      !wantedBy
     ) {
       result.skipped += 1;
       continue;
@@ -973,12 +996,9 @@ export async function importBackup(
       kind: row.kind,
       text: row.text.trim().slice(0, 500),
       note: typeof row.note === "string" ? row.note.slice(0, 1000) : "",
-      wanted_by: row.wanted_by,
+      wanted_by: wantedBy,
       is_done: isDone,
-      done_by:
-        row.done_by === "Andrew" || row.done_by === "Juliette"
-          ? row.done_by
-          : null,
+      done_by: asName(row.done_by),
       done_at:
         isDone && typeof row.done_at === "string" ? row.done_at : null,
       space_id: importSpaceId(row),

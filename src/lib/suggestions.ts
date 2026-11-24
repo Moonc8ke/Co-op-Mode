@@ -71,7 +71,7 @@ export const SUGGESTIONS: Record<Exclude<Category, "seasonal">, string[]> = {
   ],
   craft: [
     "Paint each other's portraits",
-    "Make a photo collage of the two of you",
+    "Make a photo collage of everyone",
     "Build a terrarium",
     "Tie-dye shirts",
     "Make ornaments for the holidays",

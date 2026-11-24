@@ -9,11 +9,15 @@ export type Category =
   | "craft"
   | "places";
 
-export type Person = "Andrew" | "Juliette";
+/** A person's name in the space. Free-form since migration 0009
+ * (it used to be exactly "Andrew" | "Juliette") — any member types
+ * their own name in the "Who are you?" picker, and a space can hold
+ * any number of people. */
+export type Person = string;
 
-/** One row per signed-in account, saying which of the two people it is.
- * The app reads this on sign-in so the dinner and cravings forms already
- * know who is typing. */
+/** One row per signed-in account, saying which person in the space
+ * it is. The app reads this on sign-in so the dinner and cravings
+ * forms already know who is typing. */
 export interface Profile {
   id: string;
   display_name: Person;

@@ -1,7 +1,7 @@
 # Couples App
 
-A shared app for two people — Andrew & Juliette. One place for the things
-a couple plans and remembers together:
+A shared app for one space — a couple, a family, or a household. One place for the things
+everyone in the space plans and remembers together:
 
 - **Seasonal bucket list** with season tabs (Spring / Summer / Fall /
   Winter, current season marked "now"), a one-time season-change greeting
@@ -22,29 +22,29 @@ a couple plans and remembers together:
   places ideas.
 - **Dinner this week** — one person suggests a dinner for a night this
   week (pick the day, defaults to today); suggestions lay out by day,
-  soonest first, like the calendar. The other can accept it, decline
+  soonest first, like the calendar. Anyone else in the space can accept it, decline
   it, or counter with something else for the same night. Counters show
   "Instead of: …", an accepted dinner gets an "It's decided" banner for
   that day, past dinners and earlier rounds stay in collapsible history.
-- **Cravings** — either person posts "I'm craving X" or "I'm looking
-  for Y" (food, an item, anything), with an optional note. The other
+- **Cravings** — anyone posts "I'm craving X" or "I'm looking
+  for Y" (food, an item, anything), with an optional note. Someone else
   can mark it "Got it", recording who fulfilled it and where they found
   it. Fulfilled cravings move to a collapsible history.
-- **Tell you later** — something to tell the other, a thing to
+- **Tell you later** — something to tell everyone else, a thing to
   remember to do, or good news worth celebrating later, before it's
   forgotten by dinner. Three kinds: "Tell you", "Remind me to do",
   and "Good news", each with an optional "when?" note. Mark one "Told
   you", "Done", or "Celebrated" and it moves to a collapsible history.
-- **Push notifications** — a gentle ping on your phone when the other
-  posts a craving, suggests a dinner, or leaves you a note. Each phone
+- **Push notifications** — a gentle ping on your phone when someone else
+  in your space posts a craving, suggests a dinner, or leaves you a note. Each phone
   opts in once from a banner on the home page; saying no hides it and
   never nags. See "Push notifications" below for the setup.
-- **It knows who you are** — each account picks a name once ("Who are
+- **It knows who you are** — each account types a name once ("Who are
   you?"), saved on that account, so the dinner, cravings, and
-  tell-you-later forms already know who's typing. No more "I'm Andrew /
-  I'm Juliette" toggle on every post, and no identity UI on the forms
-  at all — the name shows up on the posted item instead ("Andrew
-  suggested…", "Juliette is craving…").
+  tell-you-later forms already know who's typing. No toggle on every
+  post, and no identity UI on the forms at all — the name shows up on
+  the posted item instead ("Maya suggested…", "Sam is craving…").
+  Anyone can change their saved name later from the header.
 - **Scrapbook** — photos with a caption and date, shown as tilted
   polaroids with a lightbox.
 - **Backup** — export everything as JSON, or import a backup file (the
@@ -293,23 +293,24 @@ you want them back in the scrapbook.
   page; unauthenticated visitors are redirected to it.
 - **Sharing model:** Row Level Security is enabled on every table, with a
   single policy per table: any signed-in user can read and write every
-  row. This is a deliberate choice for a two-person family app — Andrew
-  and Juliette share everything on purpose, and there is no per-user
-  ownership. If the app ever grows beyond the two of them, add an
-  `owner_id` column and tighten the policies before inviting anyone else.
-  The one exception is `push_subscriptions` (migration 0006): each
-  person can only see their own notification subscriptions, because a
-  subscription belongs to one phone. The send-push Edge Function reads
-  them with the service role key instead, so it can notify the other
-  person.
+  row. This is a deliberate choice for a small family app — everyone in
+  the space shares everything on purpose, and there is no per-user
+  ownership. Spaces (migration 0007) wall each space's data off from
+  every other space. The one exception is `push_subscriptions`
+  (migration 0006): each person can only see their own notification
+  subscriptions, because a subscription belongs to one phone. The
+  send-push Edge Function reads them with the service role key instead,
+  so it can notify the other members of the space.
 - **Who's who:** The `profiles` table (migration 0003) holds one row per
-  account with a `display_name` of Andrew or Juliette. The app reads it
-  on sign-in; dinner suggestions and cravings are posted as that person,
-  and accept/decline/counter/"Got it" are recorded as that person too.
-  Older dinner and craving rows keep the names they were saved with.
-  Nothing stops both accounts picking the same name — if that happens,
-  one of you can fix it by deleting that row from the `profiles` table
-  in Supabase (Table Editor) and picking again on the next sign-in.
+  account with a free-form `display_name`, typed in the app's "Who are
+  you?" picker (migration 0009 dropped the old Andrew/Juliette-only
+  check). The app reads it on sign-in; dinner suggestions and cravings
+  are posted as that person, and accept/decline/counter/"Got it" are
+  recorded as that person too. Older dinner and craving rows keep the
+  names they were saved with. Nothing stops two accounts picking the
+  same name — if that happens, one of you can fix it by deleting that
+  row from the `profiles` table in Supabase (Table Editor) and picking
+  again on the next sign-in.
 - **Photos:** Scrapbook photos live in the `scrapbook-photos` storage
   bucket (public for viewing, so they render with a plain `<img>` tag;
   only signed-in users can upload or delete). Photo URLs include a

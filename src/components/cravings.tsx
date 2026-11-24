@@ -82,7 +82,7 @@ export function CravingsSection({
       <SectionHeader
         emoji="🤤"
         label="Cravings"
-        blurb="Craving something, or looking for a thing? Post it here so the other can surprise you."
+        blurb="Craving something, or looking for a thing? Post it here so someone else can surprise you."
         color="var(--plum)"
         pill={open.length > 0 ? `${open.length} open` : undefined}
         collapsed={collapsed}
@@ -104,7 +104,7 @@ export function CravingsSection({
           ))}
         </ul>
       ) : (
-        <EmptyNote text="Nothing on the craving board. Post a hankering below and see if the other stumbles across it." />
+        <EmptyNote text="Nothing on the craving board. Post a hankering below and see if someone else stumbles across it." />
       )}
 
       {/* Post a craving — posted as whoever is signed in. */}

@@ -7,7 +7,6 @@ import {
   isPushSupported,
   subscribeForPush,
 } from "@/lib/push";
-import { otherPerson } from "@/lib/seasons";
 import type { Person } from "@/lib/types";
 
 const DISMISSED_KEY = "couples-app-push-banner-dismissed";
@@ -74,7 +73,6 @@ export function PushBanner({ me }: { me: Person | null }) {
   }
 
   if (!visible || me === null) return null;
-  const other = otherPerson(me);
 
   return (
     <div
@@ -87,7 +85,7 @@ export function PushBanner({ me }: { me: Person | null }) {
       </span>
       <div className="min-w-0 flex-1">
         <p className="font-semibold leading-tight">
-          Get notified when {other} posts something
+          Get notified when everyone else in your space posts something
         </p>
         <p className="mt-0.5 text-sm text-[var(--dim)]">
           A gentle ping when they post a craving, suggest a dinner, or

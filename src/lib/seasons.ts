@@ -81,7 +81,3 @@ export function fmtWhen(iso: string): string {
   if (isToday) return `Today · ${time}`;
   return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })} · ${time}`;
 }
-
-export function otherPerson(p: "Andrew" | "Juliette"): "Andrew" | "Juliette" {
-  return p === "Andrew" ? "Juliette" : "Andrew";
-}

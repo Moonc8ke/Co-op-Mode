@@ -119,7 +119,7 @@ export function TellYouLaterSection({
       <SectionHeader
         emoji="💬"
         label="Tell you later"
-        blurb="Something to tell the other, a thing to remember to do, or good news worth celebrating later — post it here so it isn't forgotten."
+        blurb="Something to tell everyone else, a thing to remember to do, or good news worth celebrating later — post it here so it isn't forgotten."
         color="var(--sky)"
         pill={open.length > 0 ? `${open.length} waiting` : undefined}
         collapsed={collapsed}
@@ -141,7 +141,7 @@ export function TellYouLaterSection({
               ))}
             </ul>
           ) : (
-            <EmptyNote text="Nothing waiting to be told. When something pops into your head, leave it here for the other." />
+            <EmptyNote text="Nothing waiting to be told. When something pops into your head, leave it here for everyone else." />
           )}
 
           {/* Post a note — posted as whoever is signed in. */}
@@ -169,7 +169,7 @@ export function TellYouLaterSection({
                     aria-pressed={kind === k}
                     aria-label={
                       k === "tell"
-                        ? "This is something to tell the other"
+                        ? "This is something to tell everyone else"
                         : k === "do"
                           ? "This is something to remember to do"
                           : "This is good news to celebrate later"
@@ -192,7 +192,7 @@ export function TellYouLaterSection({
                 <input
                   aria-label={
                     kind === "tell"
-                      ? "What do you want to tell the other"
+                      ? "What do you want to tell everyone else"
                       : kind === "do"
                         ? "What should you remember to do"
                         : "What is the good news"

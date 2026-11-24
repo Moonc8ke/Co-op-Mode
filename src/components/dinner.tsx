@@ -8,7 +8,7 @@ import {
   proposeDinner,
   respondToDinnerProposal,
 } from "@/lib/data";
-import { fmtDay, fmtWhen, otherPerson, relDay, todayStr } from "@/lib/seasons";
+import { fmtDay, fmtWhen, relDay, todayStr } from "@/lib/seasons";
 import type { DinnerProposal, Item, Person } from "@/lib/types";
 import { IdentityMiniPicker } from "./identity";
 import { EmptyNote, SectionHeader, sectionPanelStyle } from "./shared";
@@ -125,7 +125,7 @@ export function DinnerDecisionsSection({
       <SectionHeader
         emoji="🍽️"
         label="Dinner this week"
-        blurb="Suggest a dinner for a night this week — the other can say yes, pass, or propose something else instead."
+        blurb="Suggest a dinner for a night this week — anyone else can say yes, pass, or propose something else instead."
         color="var(--gold)"
         pill={
           pending.length > 0
@@ -178,7 +178,7 @@ export function DinnerDecisionsSection({
           </div>
         ))
       ) : (
-        <EmptyNote text="No dinners on the table this week yet. Suggest something below and let the other decide." />
+        <EmptyNote text="No dinners on the table this week yet. Suggest something below and let everyone else decide." />
       )}
 
       {/* Suggest a dinner — posted as whoever is signed in. */}
@@ -359,7 +359,10 @@ function DinnerProposalCard({
   showDay?: boolean;
 }) {
   const supabase = createClient();
-  const responder = otherPerson(proposal.suggested_by);
+  // The person answering is whoever is signed in — the buttons below
+  // act as them. (It used to be "the other partner"; a space can hold
+  // any number of people now.)
+  const responder = me ?? "You";
   const counterOf =
     proposal.counter_of_id != null
       ? (allProposals.find((p) => p.id === proposal.counter_of_id) ?? null)

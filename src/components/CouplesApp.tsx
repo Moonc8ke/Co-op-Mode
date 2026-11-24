@@ -7,6 +7,7 @@ import {
   carryOverItems,
   downloadBackup,
   getMyProfile,
+  getMySpaceName,
   importBackup,
   listCravings,
   listDinnerProposals,
@@ -148,9 +149,12 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
   // load, so the dinner and cravings forms already know who's typing.
   // Null until the person has picked a name.
   const [me, setMe] = useState<Person | null>(null);
-  const [identityModal, setIdentityModal] = useState<"first-run" | null>(
-    null,
-  );
+  // The space's display name for the header (e.g. "Andrew & Juliette").
+  // Null until loaded, or when the account has no space yet.
+  const [spaceName, setSpaceName] = useState<string | null>(null);
+  const [identityModal, setIdentityModal] = useState<
+    "first-run" | "edit-name" | null
+  >(null);
   const [identitySaving, setIdentitySaving] = useState(false);
   const [identityError, setIdentityError] = useState("");
   // The first-run picker is offered once per session; dismissing it
@@ -196,6 +200,14 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
       } else if (!identityPromptedRef.current) {
         identityPromptedRef.current = true;
         setIdentityModal("first-run");
+      }
+      // The space name is separate from the profile: it comes from the
+      // spaces table, and a missing one just falls back to "Our book"
+      // in the header.
+      try {
+        setSpaceName(await getMySpaceName(supabase));
+      } catch {
+        setSpaceName(null);
       }
     } catch {
       // Most likely the profiles table doesn't exist yet (migration 0003
@@ -440,16 +452,28 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
             <header className="pt-6">
               <div className="flex items-start justify-between gap-3">
                 <p className="text-sm font-medium tracking-wide text-[var(--accent)]">
-                  Andrew &amp; Juliette
+                  {spaceName ?? "Our book"}
                 </p>
-                <button
-                  type="button"
-                  onClick={() => void signOut()}
-                  className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-xs font-medium text-[var(--dim)]"
-                  aria-label={`Sign out of ${userEmail}`}
-                >
-                  Sign out
-                </button>
+                <div className="flex items-center gap-2">
+                  {me && (
+                    <button
+                      type="button"
+                      onClick={() => setIdentityModal("edit-name")}
+                      className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-xs font-medium text-[var(--dim)]"
+                      aria-label={`Change your name, currently ${me}`}
+                    >
+                      ✎ {me}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void signOut()}
+                    className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-xs font-medium text-[var(--dim)]"
+                    aria-label={`Sign out of ${userEmail}`}
+                  >
+                    Sign out
+                  </button>
+                </div>
               </div>
               <h1 className="font-display mt-1 text-4xl font-semibold leading-tight">
                 {season} together {SEASON_EMOJI[season]}
@@ -499,7 +523,7 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
             </header>
 
             {/* Push notifications: a one-time, dismissible offer to get
-                a ping when the other posts something. */}
+                a ping when someone else in your space posts something. */}
             <PushBanner me={me} />
 
             {/* Season-change greeting: shown once when a new season begins. */}
@@ -645,7 +669,7 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
               </div>
             )}
 
-            {/* Cravings: post a hankering, the other can surprise you. */}
+            {/* Cravings: post a hankering, someone else can surprise you. */}
             {layout.isVisible("cravings") && (
               <div style={{ order: layout.indexOf("cravings") }}>
                 {editBar("cravings")}
@@ -662,7 +686,7 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
               </div>
             )}
 
-            {/* Tell you later: something to tell the other, a thing to
+            {/* Tell you later: something to tell everyone else, a thing to
                 remember to do, or good news to celebrate later. */}
             {layout.isVisible("tell-you-later") && (
               <div style={{ order: layout.indexOf("tell-you-later") }}>
@@ -761,7 +785,7 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
                 <EmptyNote
                   text={
                     seasonItems.length > 0
-                      ? `Every ${viewSeason} wish is checked off. Nice work, you two.`
+                      ? `Every ${viewSeason} wish is checked off. Nice work, everyone.`
                       : viewSeason === season
                         ? `No ${viewSeason} wishes yet. Tap “Add new things” to dream a few up.`
                         : `Nothing on the ${viewSeason} list yet. Tap “Add new things” to start dreaming it up.`
@@ -1180,17 +1204,21 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
         )}
 
         <footer className="mt-12 text-center text-xs text-[var(--dim)]">
-          Made for two. Everything you add is saved here, ready for the next
-          “what should we do?”
+          Made for your space. Everything you add is saved here, ready for
+          the next “what should we do?”
         </footer>
 
         {/* Who are you? — one-time picker the first time someone signs
-            in. The name is saved on their account; after that the
+            in, and the name-change form when opened from the header.
+            The name is saved on their account; after that the
             dinner and cravings forms post as them silently. */}
         {identityModal && (
           <IdentityPickerModal
             saving={identitySaving}
             error={identityError}
+            initialName={
+              identityModal === "edit-name" ? (me ?? "") : ""
+            }
             onPick={(person) => void saveIdentity(person)}
             onDismiss={() => setIdentityModal(null)}
           />
