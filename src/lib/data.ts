@@ -688,6 +688,7 @@ export function buildBackup(
       id: m.id,
       caption: m.caption,
       memory_date: m.memory_date,
+      space_id: m.space_id,
     })),
   };
 }
@@ -748,6 +749,17 @@ export async function importBackup(
   }
   const raw = payload as Record<string, unknown>;
 
+  // Restoring a backup always lands in the importer's own space
+  // (migration 0007): every insert must carry space_id or it fails
+  // the new WITH CHECK and is counted as skipped. A row's own
+  // space_id is kept only when it already matches; anything else
+  // (missing, or another space's) is replaced with the importer's.
+  const mySpaceId = await getMySpaceId(supabase);
+  const importSpaceId = (row: Record<string, unknown>): string | null =>
+    typeof row.space_id === "string" && row.space_id === mySpaceId
+      ? row.space_id
+      : mySpaceId;
+
   const rawItems = Array.isArray(raw.items) ? raw.items : [];
   for (const r of rawItems) {
     const row = r as Record<string, unknown>;
@@ -775,6 +787,7 @@ export async function importBackup(
         status === "done" && typeof row.done_at === "string"
           ? row.done_at
           : null,
+      space_id: importSpaceId(row),
     });
     if (error) result.skipped += 1;
     else result.items += 1;
@@ -794,6 +807,9 @@ export async function importBackup(
       event_time: typeof row.event_time === "string" ? row.event_time.slice(0, 10) : "",
       location: typeof row.location === "string" ? row.location.slice(0, 200) : "",
       notes: typeof row.notes === "string" ? row.notes.slice(0, 1000) : "",
+      // Shared by both the primary insert and the no-is_done
+      // fallback below, so the retry keeps the space tag too.
+      space_id: importSpaceId(row),
     };
     // Carry the done state when the backup has one. If migration
     // 0008 hasn't run yet the is_done column doesn't exist, so fall
@@ -848,6 +864,7 @@ export async function importBackup(
         responded_at:
           typeof row.responded_at === "string" ? row.responded_at : null,
         dinner_date: isValidDate(row.dinner_date) ? row.dinner_date : null,
+        space_id: importSpaceId(row),
       })
       .select("id")
       .single();
@@ -889,6 +906,7 @@ export async function importBackup(
       memory_date: row.memory_date,
       storage_path: null,
       mime_type: null,
+      space_id: importSpaceId(row),
     });
     if (error) result.skipped += 1;
     else result.memories += 1;
@@ -927,6 +945,7 @@ export async function importBackup(
         status === "fulfilled" && typeof row.fulfilled_at === "string"
           ? row.fulfilled_at
           : null,
+      space_id: importSpaceId(row),
     });
     if (error) result.skipped += 1;
     else result.cravings += 1;
@@ -962,6 +981,7 @@ export async function importBackup(
           : null,
       done_at:
         isDone && typeof row.done_at === "string" ? row.done_at : null,
+      space_id: importSpaceId(row),
     });
     if (error) result.skipped += 1;
     else result.tellYouLater += 1;

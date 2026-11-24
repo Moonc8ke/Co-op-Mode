@@ -135,5 +135,6 @@ export interface BackupPayload {
     id: number;
     caption: string;
     memory_date: string;
+    space_id: string | null;
   }>;
 }
