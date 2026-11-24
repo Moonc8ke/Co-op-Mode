@@ -45,9 +45,6 @@ export default function LoginPage() {
           style={{ imageRendering: "pixelated" }}
           className="mx-auto block"
         />
-        <p className="mt-4 text-sm font-medium tracking-wide text-[var(--accent)]">
-          Andrew &amp; Juliette
-        </p>
         <h1 className="font-display mt-1 text-3xl font-semibold leading-tight">
           Our book, together
         </h1>
@@ -105,8 +102,8 @@ export default function LoginPage() {
           </button>
         </form>
         <p className="mt-4 text-center text-xs text-[var(--dim)]">
-          No account yet? Ask Andrew to create one for you in the Supabase
-          dashboard — see the README.
+          No account yet? Ask the person who shared the app with you to
+          create one for you.
         </p>
       </main>
     </div>

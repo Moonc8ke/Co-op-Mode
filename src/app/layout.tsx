@@ -3,7 +3,7 @@ import "./globals.css";
 import { ServiceWorkerRegister } from "@/components/sw-register";
 
 export const metadata: Metadata = {
-  title: "Andrew & Juliette — Our Book",
+  title: "Co-op Mode — Our Book",
   description:
     "A shared book of plans, ideas, and the good stuff you've already done together: bucket lists, a shared calendar, dinner decisions, and a photo scrapbook.",
   manifest: "/manifest.webmanifest",
