@@ -66,7 +66,7 @@ const FRAMES: Rect[][] = [FRAME_SEED, FRAME_SPROUT, FRAME_STEM, FRAME_BLOOM];
 export default function SproutLoader() {
   return (
     <div
-      className="mt-10 flex flex-col items-center gap-3"
+      className="flex min-h-[70vh] flex-col items-center justify-center gap-3"
       role="status"
       aria-label="Loading your book"
     >
@@ -75,7 +75,6 @@ export default function SproutLoader() {
           <svg
             key={i}
             viewBox="0 0 128 128"
-            shapeRendering="crispEdges"
             className={`sprout-frame sprout-frame-${i}`}
           >
             {[...SOIL, ...rects].map(([x, y, w, h, fill], j) => (
@@ -92,7 +91,7 @@ export default function SproutLoader() {
           inset: 0;
           width: 100%;
           height: 100%;
-          image-rendering: pixelated;
+          image-rendering: auto;
           opacity: 0;
           animation: sprout-frame 2.4s linear infinite;
         }
