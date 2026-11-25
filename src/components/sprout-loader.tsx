@@ -2,10 +2,10 @@
 
 // SproutLoader: a small 8-bit pixel-art sprout that grows into a flower
 // while the app loads its data, Stardew Valley style. Four frames on a
-// 16x16 grid (seed -> sprout -> tall stem -> bloom), cycled with CSS so
-// the animation is stepped like real pixel art. Rendered only by the
-// loading state in CouplesApp; it disappears as soon as content renders
-// and adds no delay of its own.
+// 16x16 grid (seed -> sprout -> tall stem -> bloom), played once in
+// order with CSS, then holds on the bloom until the app is ready.
+// Rendered only by the loading state in CouplesApp; it disappears as
+// soon as content renders and adds no delay of its own.
 
 // One pixel rect: [x, y, width, height, fill]. Grid is 16x16, one cell
 // is 8 units in the 128x128 viewBox.
@@ -93,15 +93,17 @@ export default function SproutLoader() {
           height: 100%;
           image-rendering: auto;
           opacity: 0;
-          animation: sprout-frame 2.4s linear infinite;
         }
-        .sprout-frame-0 { animation-delay: 0s; }
-        .sprout-frame-1 { animation-delay: 0.6s; }
-        .sprout-frame-2 { animation-delay: 1.2s; }
-        .sprout-frame-3 { animation-delay: 1.8s; }
+        .sprout-loader svg.sprout-frame-0 { animation: sprout-frame 2.4s linear 0s forwards; }
+        .sprout-loader svg.sprout-frame-1 { animation: sprout-frame 2.4s linear 0.6s forwards; }
+        .sprout-loader svg.sprout-frame-2 { animation: sprout-frame 2.4s linear 1.2s forwards; }
+        .sprout-loader svg.sprout-frame-3 { animation: sprout-bloom 2.4s linear 1.8s forwards; }
         @keyframes sprout-frame {
           0%, 24.9% { opacity: 1; }
           25%, 100% { opacity: 0; }
+        }
+        @keyframes sprout-bloom {
+          0%, 100% { opacity: 1; }
         }
         @keyframes sprout-bob {
           0%, 100% { transform: translateY(0); }
@@ -110,7 +112,7 @@ export default function SproutLoader() {
         @media (prefers-reduced-motion: reduce) {
           .sprout-loader { animation: none; }
           .sprout-loader svg { animation: none; opacity: 0; }
-          .sprout-frame-3 { opacity: 1; }
+          .sprout-loader svg.sprout-frame-3 { opacity: 1; }
         }
       `}</style>
     </div>
