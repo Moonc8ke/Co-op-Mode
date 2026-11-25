@@ -35,6 +35,18 @@ everyone in the space plans and remembers together:
   forgotten by dinner. Three kinds: "Tell you", "Remind me to do",
   and "Good news", each with an optional "when?" note. Mark one "Told
   you", "Done", or "Celebrated" and it moves to a collapsible history.
+- **Grocery list** — one shared list for the shop: add an item with an
+  optional quantity or detail, check it off when it's picked up, and
+  see who added and who grabbed each thing. Picked-up items move to a
+  collapsible history; unchecking puts one back on the list.
+- **Cooked together** — the dishes you've made together, each with a
+  cooked date and a star rating (1–5) from everyone who tried it.
+  Tap "Cooked it" on a recipe idea to log it, or log a dish straight
+  from the section; tap a star to set or change your own rating.
+- **Countdowns** — an event can opt in to a countdown ("Today!",
+  "Tomorrow", "in N days") shown in Coming up and in its detail
+  pop-out. Off by default; tick "Count down to this" in the event
+  form to turn it on for that event only.
 - **Push notifications** — a gentle ping on your phone when someone else
   in your space posts a craving, suggests a dinner, or leaves you a note. Each phone
   opts in once from a banner on the home page; saying no hides it and
@@ -367,12 +379,18 @@ src/
                           on home, pick for tonight, scrapbook tile,
                           backup export/import
     items.tsx             Bucket-list + idea sections, item cards with
-                          detail pop-outs, add forms, suggestion chips
-    calendar.tsx          Shared calendar, event cards with detail pop-outs
+                          detail pop-outs, add forms, suggestion chips,
+                          "Cooked it" on recipe cards
+    calendar.tsx          Shared calendar, event cards with detail pop-outs,
+                          opt-in countdowns on events
     dinner.tsx            "Dinner this week" suggest / accept / decline /
                           counter flow, laid out by day
     cravings.tsx          Cravings board: post a craving or a wish, mark
                           it "Got it" with who fulfilled it and where
+    grocery.tsx           Shared grocery list: add, check off as picked
+                          up, collapsible picked-up history
+    cooked.tsx            "Cooked together": cooked dishes with per-person
+                          star ratings
     tell-you-later.tsx    "Tell you later": something to tell the other,
                           a thing to remember to do, or good news to
                           celebrate later; mark it told / done /
@@ -404,6 +422,10 @@ supabase/
     0005_tell_you_later.sql  "Tell you later" table + RLS (run after 0004)
     0006_push_subscriptions.sql  Push subscriptions, one row per
                           phone (run after 0005)
+    0011_grocery_list.sql  Grocery items table + RLS (run after 0010)
+    0012_cooked_ratings.sql  Cooked dishes + dish ratings tables + RLS
+                          (run after 0011)
+    0013_event_countdown.sql  show_countdown on events (run after 0012)
   functions/
     send-push/index.ts    Edge Function: notifies the other partner when
                           a craving, dinner proposal, or tell-you-later

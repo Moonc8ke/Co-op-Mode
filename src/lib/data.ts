@@ -3,9 +3,12 @@ import type {
   BackupPayload,
   CalEvent,
   Category,
+  CookedDish,
   Craving,
   CravingKind,
   DinnerProposal,
+  DishRating,
+  GroceryItem,
   Item,
   ItemStatus,
   Memory,
@@ -379,21 +382,34 @@ export async function addEvent(
     event_time?: string;
     location?: string;
     notes?: string;
+    /** Opt this event in to a countdown in Coming up. Needs
+     * migration 0013_event_countdown.sql; the insert is retried
+     * without it when the column doesn't exist yet. */
+    show_countdown?: boolean;
   },
 ): Promise<number> {
-  const { data, error } = await supabase
+  const base = {
+    title: args.title.trim(),
+    event_date: args.event_date,
+    event_time: (args.event_time ?? "").trim(),
+    location: (args.location ?? "").trim(),
+    notes: (args.notes ?? "").trim(),
+    space_id: await getMySpaceId(supabase),
+  };
+  let { data, error } = await supabase
     .from("events")
-    .insert({
-      title: args.title.trim(),
-      event_date: args.event_date,
-      event_time: (args.event_time ?? "").trim(),
-      location: (args.location ?? "").trim(),
-      notes: (args.notes ?? "").trim(),
-      space_id: await getMySpaceId(supabase),
-    })
+    .insert({ ...base, show_countdown: args.show_countdown ?? false })
     .select("id")
     .single();
+  if (error && /show_countdown/i.test(error.message ?? "")) {
+    ({ data, error } = await supabase
+      .from("events")
+      .insert(base)
+      .select("id")
+      .single());
+  }
   if (error) throw error;
+  if (!data) throw new Error("That didn't save. Please try again.");
   return data.id as number;
 }
 
@@ -405,8 +421,11 @@ export async function deleteEvent(
   if (error) throw error;
 }
 
-/** Updates a plan's details (title, date, time, location, notes).
- * Works without any migration — the columns already exist. */
+/** Updates a plan's details (title, date, time, location, notes,
+ * countdown opt-in). Works without any migration — the columns
+ * already exist. When show_countdown is left out it is left alone;
+ * when migration 0013 hasn't run yet, an update that includes it is
+ * retried without it instead of failing. */
 export async function updateEvent(
   supabase: SupabaseClient,
   id: number,
@@ -416,18 +435,27 @@ export async function updateEvent(
     event_time?: string;
     location?: string;
     notes?: string;
+    show_countdown?: boolean;
   },
 ): Promise<void> {
-  const { error } = await supabase
+  const base = {
+    title: args.title.trim(),
+    event_date: args.event_date,
+    event_time: (args.event_time ?? "").trim(),
+    location: (args.location ?? "").trim(),
+    notes: (args.notes ?? "").trim(),
+  };
+  const withCountdown =
+    args.show_countdown !== undefined
+      ? { ...base, show_countdown: args.show_countdown }
+      : base;
+  let { error } = await supabase
     .from("events")
-    .update({
-      title: args.title.trim(),
-      event_date: args.event_date,
-      event_time: (args.event_time ?? "").trim(),
-      location: (args.location ?? "").trim(),
-      notes: (args.notes ?? "").trim(),
-    })
+    .update(withCountdown)
     .eq("id", id);
+  if (error && /show_countdown/i.test(error.message ?? "")) {
+    ({ error } = await supabase.from("events").update(base).eq("id", id));
+  }
   if (error) throw error;
 }
 
@@ -694,6 +722,220 @@ export async function deleteTellYouLater(
   if (error) throw error;
 }
 
+/* ---------------- Grocery list ---------------- */
+
+export async function listGroceryItems(
+  supabase: SupabaseClient,
+): Promise<GroceryItem[]> {
+  const spaceId = await getMySpaceId(supabase);
+  // A spaceless account has no rows by definition. Return early:
+  // `.eq("space_id", null)` sends `space_id=eq.null`, which
+  // PostgREST rejects, so querying here would throw and the home
+  // page would show its load-error banner.
+  if (!spaceId) return [];
+  const { data, error } = await supabase
+    .from("grocery_items")
+    .select("*")
+    .eq("space_id", spaceId)
+    .order("id", { ascending: false });
+  if (error) throw error;
+  return data as GroceryItem[];
+}
+
+export async function addGroceryItem(
+  supabase: SupabaseClient,
+  args: {
+    title: string;
+    note?: string;
+    wanted_by: Person;
+  },
+): Promise<number> {
+  const { data, error } = await supabase
+    .from("grocery_items")
+    .insert({
+      title: args.title.trim(),
+      note: (args.note ?? "").trim(),
+      wanted_by: args.wanted_by,
+      is_done: false,
+      space_id: await getMySpaceId(supabase),
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
+  return data.id as number;
+}
+
+/** Checks an item off as picked up (or puts it back). Checking off
+ * stamps done_by and done_at; undoing clears both. */
+export async function setGroceryItemDone(
+  supabase: SupabaseClient,
+  id: number,
+  done: boolean,
+  doneBy: Person | null,
+): Promise<void> {
+  const { error } = await supabase
+    .from("grocery_items")
+    .update({
+      is_done: done,
+      done_by: done ? doneBy : null,
+      done_at: done ? new Date().toISOString() : null,
+    })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteGroceryItem(
+  supabase: SupabaseClient,
+  id: number,
+): Promise<void> {
+  const { error } = await supabase
+    .from("grocery_items")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
+}
+
+/* ---------------- Cooked dishes & ratings ---------------- */
+
+export async function listCookedDishes(
+  supabase: SupabaseClient,
+): Promise<CookedDish[]> {
+  const spaceId = await getMySpaceId(supabase);
+  // A spaceless account has no rows by definition. Return early:
+  // `.eq("space_id", null)` sends `space_id=eq.null`, which
+  // PostgREST rejects, so querying here would throw and the home
+  // page would show its load-error banner.
+  if (!spaceId) return [];
+  const { data, error } = await supabase
+    .from("cooked_dishes")
+    .select("*")
+    .eq("space_id", spaceId)
+    .order("cooked_date", { ascending: false })
+    .order("id", { ascending: false });
+  if (error) throw error;
+  return data as CookedDish[];
+}
+
+export async function listDishRatings(
+  supabase: SupabaseClient,
+): Promise<DishRating[]> {
+  const spaceId = await getMySpaceId(supabase);
+  // Same spaceless early return as the other list functions.
+  if (!spaceId) return [];
+  const { data, error } = await supabase
+    .from("dish_ratings")
+    .select("*")
+    .eq("space_id", spaceId)
+    .order("id", { ascending: true });
+  if (error) throw error;
+  return data as DishRating[];
+}
+
+/** Records a dish the space cooked together — from a recipe idea
+ * (pass its item id) or a standalone title. The date defaults to
+ * today. Needs migration 0012_cooked_ratings.sql. */
+export async function addCookedDish(
+  supabase: SupabaseClient,
+  args: {
+    title: string;
+    cooked_date?: string;
+    item_id?: number | null;
+    cooked_by?: Person | null;
+  },
+): Promise<number> {
+  const { data, error } = await supabase
+    .from("cooked_dishes")
+    .insert({
+      title: args.title.trim(),
+      cooked_date: args.cooked_date ?? new Date().toISOString().slice(0, 10),
+      item_id: args.item_id ?? null,
+      cooked_by: args.cooked_by ?? null,
+      space_id: await getMySpaceId(supabase),
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
+  return data.id as number;
+}
+
+/** Sets (or changes) the signed-in person's star rating on a dish.
+ * Each person has one rating per dish (migration 0012's unique
+ * index), so rating again overwrites. The lookup is
+ * case-insensitive on the name; the index is the backstop if two
+ * ratings race and the second insert hits a 23505. */
+export async function rateDish(
+  supabase: SupabaseClient,
+  args: {
+    dish_id: number;
+    rated_by: Person;
+    stars: number;
+    note?: string;
+  },
+): Promise<void> {
+  const stars = Math.max(1, Math.min(5, Math.round(args.stars)));
+  const name = args.rated_by.trim();
+  if (!name) throw new Error("You need a name to rate a dish.");
+  const { data: existing } = await supabase
+    .from("dish_ratings")
+    .select("id")
+    .eq("dish_id", args.dish_id)
+    .ilike("rated_by", name)
+    .maybeSingle();
+  if (existing) {
+    const { error } = await supabase
+      .from("dish_ratings")
+      .update({ stars, note: (args.note ?? "").trim() })
+      .eq("id", (existing as { id: number }).id);
+    if (error) throw error;
+    return;
+  }
+  const { error } = await supabase.from("dish_ratings").insert({
+    dish_id: args.dish_id,
+    rated_by: name,
+    stars,
+    note: (args.note ?? "").trim(),
+    space_id: await getMySpaceId(supabase),
+  });
+  if (error) {
+    // Race backstop: another rating for the same dish and name
+    // landed first and the unique index rejected this insert.
+    // Update the row that won instead of showing a raw error.
+    if (
+      error.code === "23505" ||
+      /duplicate key value/i.test(error.message ?? "")
+    ) {
+      const { data: winner } = await supabase
+        .from("dish_ratings")
+        .select("id")
+        .eq("dish_id", args.dish_id)
+        .ilike("rated_by", name)
+        .maybeSingle();
+      if (winner) {
+        const { error: updateError } = await supabase
+          .from("dish_ratings")
+          .update({ stars, note: (args.note ?? "").trim() })
+          .eq("id", (winner as { id: number }).id);
+        if (updateError) throw updateError;
+        return;
+      }
+    }
+    throw error;
+  }
+}
+
+/** Deletes a cooked dish; its ratings go with it (on delete
+ * cascade). */
+export async function deleteCookedDish(
+  supabase: SupabaseClient,
+  id: number,
+): Promise<void> {
+  const { error } = await supabase
+    .from("cooked_dishes")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
+}
+
 /* ---------------- Scrapbook memories ---------------- */
 
 /** Shrinks big phone photos before upload so they save fast. Same rule as
@@ -791,6 +1033,9 @@ export function buildBackup(
   cravings: Craving[],
   tellYouLater: TellYouLater[],
   memories: Memory[],
+  groceryItems: GroceryItem[],
+  cookedDishes: CookedDish[],
+  dishRatings: DishRating[],
 ): BackupPayload {
   return {
     exported_at: new Date().toISOString(),
@@ -799,6 +1044,9 @@ export function buildBackup(
     dinner_proposals: proposals,
     cravings,
     tell_you_later: tellYouLater,
+    grocery_items: groceryItems,
+    cooked_dishes: cookedDishes,
+    dish_ratings: dishRatings,
     memories: memories.map((m) => ({
       id: m.id,
       caption: m.caption,
@@ -826,6 +1074,9 @@ export interface ImportResult {
   proposals: number;
   cravings: number;
   tellYouLater: number;
+  groceryItems: number;
+  cookedDishes: number;
+  dishRatings: number;
   memories: number;
   skipped: number;
 }
@@ -856,6 +1107,9 @@ export async function importBackup(
     proposals: 0,
     cravings: 0,
     tellYouLater: 0,
+    groceryItems: 0,
+    cookedDishes: 0,
+    dishRatings: 0,
     memories: 0,
     skipped: 0,
   };
@@ -926,17 +1180,19 @@ export async function importBackup(
       // fallback below, so the retry keeps the space tag too.
       space_id: importSpaceId(row),
     };
-    // Carry the done state when the backup has one. If migration
-    // 0008 hasn't run yet the is_done column doesn't exist, so fall
-    // back to importing the plan without its done state instead of
-    // dropping the whole event.
+    // Carry the done state and the countdown opt-in when the backup
+    // has them. If migration 0008 or 0013 hasn't run yet the is_done
+    // or show_countdown column doesn't exist, so fall back to
+    // importing the plan without those instead of dropping the whole
+    // event.
     let { error } = await supabase.from("events").insert({
       ...eventBase,
       is_done: isDone,
       done_at:
         isDone && typeof row.done_at === "string" ? row.done_at : null,
+      show_countdown: row.show_countdown === true,
     });
-    if (error && /is_done/.test(error.message ?? "")) {
+    if (error && /(is_done|show_countdown)/.test(error.message ?? "")) {
       ({ error } = await supabase.from("events").insert(eventBase));
     }
     if (error) result.skipped += 1;
@@ -1094,6 +1350,101 @@ export async function importBackup(
     });
     if (error) result.skipped += 1;
     else result.tellYouLater += 1;
+  }
+
+  // Grocery items are new in migration 0011, so older backups may
+  // not have them at all — that is fine, nothing is skipped for a
+  // missing list.
+  const rawGrocery = Array.isArray(raw.grocery_items)
+    ? raw.grocery_items
+    : [];
+  for (const r of rawGrocery) {
+    const row = r as Record<string, unknown>;
+    const wantedBy = asName(row.wanted_by);
+    if (typeof row.title !== "string" || !row.title.trim() || !wantedBy) {
+      result.skipped += 1;
+      continue;
+    }
+    const isDone = row.is_done === true;
+    const { error } = await supabase.from("grocery_items").insert({
+      title: row.title.trim().slice(0, 200),
+      note: typeof row.note === "string" ? row.note.slice(0, 200) : "",
+      wanted_by: wantedBy,
+      is_done: isDone,
+      done_by: asName(row.done_by),
+      done_at:
+        isDone && typeof row.done_at === "string" ? row.done_at : null,
+      space_id: importSpaceId(row),
+    });
+    if (error) result.skipped += 1;
+    else result.groceryItems += 1;
+  }
+
+  // Cooked dishes are new in migration 0012, so older backups may not
+  // have them at all. Dishes are inserted in original order so the
+  // ratings below can re-link to the new ids; the link back to the
+  // recipe idea (item_id) is not preserved, since items get new ids
+  // on import too.
+  const dishIdMap = new Map<number, number>();
+  const rawDishes = Array.isArray(raw.cooked_dishes)
+    ? raw.cooked_dishes
+    : [];
+  for (const r of rawDishes) {
+    const row = r as Record<string, unknown>;
+    if (typeof row.title !== "string" || !row.title.trim()) {
+      result.skipped += 1;
+      continue;
+    }
+    if (!isValidDate(row.cooked_date)) {
+      result.skipped += 1;
+      continue;
+    }
+    const { data, error } = await supabase
+      .from("cooked_dishes")
+      .insert({
+        title: row.title.trim().slice(0, 200),
+        cooked_date: row.cooked_date,
+        item_id: null,
+        cooked_by: asName(row.cooked_by),
+        space_id: importSpaceId(row),
+      })
+      .select("id")
+      .single();
+    if (error || !data) {
+      result.skipped += 1;
+      continue;
+    }
+    result.cookedDishes += 1;
+    if (typeof row.id === "number") dishIdMap.set(row.id, data.id as number);
+  }
+
+  // Dish ratings are new in migration 0012. A rating whose dish
+  // wasn't imported has nowhere to go, so it is skipped.
+  const rawRatings = Array.isArray(raw.dish_ratings)
+    ? raw.dish_ratings
+    : [];
+  for (const r of rawRatings) {
+    const row = r as Record<string, unknown>;
+    const ratedBy = asName(row.rated_by);
+    const stars =
+      typeof row.stars === "number" ? Math.round(row.stars) : 0;
+    const newDishId =
+      typeof row.dish_id === "number"
+        ? dishIdMap.get(row.dish_id)
+        : undefined;
+    if (!ratedBy || stars < 1 || stars > 5 || newDishId === undefined) {
+      result.skipped += 1;
+      continue;
+    }
+    const { error } = await supabase.from("dish_ratings").insert({
+      dish_id: newDishId,
+      rated_by: ratedBy,
+      stars,
+      note: typeof row.note === "string" ? row.note.slice(0, 500) : "",
+      space_id: importSpaceId(row),
+    });
+    if (error) result.skipped += 1;
+    else result.dishRatings += 1;
   }
 
   return result;

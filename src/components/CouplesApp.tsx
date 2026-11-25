@@ -10,9 +10,12 @@ import {
   getMySpaceId,
   getMySpaceName,
   importBackup,
+  listCookedDishes,
   listCravings,
   listDinnerProposals,
+  listDishRatings,
   listEvents,
+  listGroceryItems,
   listItems,
   listMemories,
   listTellYouLater,
@@ -32,8 +35,11 @@ import {
 } from "@/lib/seasons";
 import type {
   CalEvent,
+  CookedDish,
   Craving,
   DinnerProposal,
+  DishRating,
+  GroceryItem,
   Item,
   Memory,
   Person,
@@ -48,7 +54,9 @@ import {
 import { CategorySection, ItemCard } from "./items";
 import { CalendarSection, EventCard } from "./calendar";
 import { CravingsSection } from "./cravings";
+import { CookedSection } from "./cooked";
 import { DinnerDecisionsSection } from "./dinner";
+import { GrocerySection } from "./grocery";
 import { IdentityPickerModal } from "./identity";
 import { PushBanner } from "./push-banner";
 import { ScrapbookSection } from "./scrapbook";
@@ -128,6 +136,9 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
   const [cravings, setCravings] = useState<Craving[]>([]);
   const [tellYouLater, setTellYouLater] = useState<TellYouLater[]>([]);
   const [memories, setMemories] = useState<Memory[]>([]);
+  const [groceryItems, setGroceryItems] = useState<GroceryItem[]>([]);
+  const [cookedDishes, setCookedDishes] = useState<CookedDish[]>([]);
+  const [dishRatings, setDishRatings] = useState<DishRating[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [view, setView] = useState<View>("home");
@@ -178,6 +189,9 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
         cravingsData,
         tellYouLaterData,
         memoriesData,
+        groceryData,
+        cookedData,
+        ratingsData,
       ] = await Promise.all([
         listItems(supabase),
         listEvents(supabase),
@@ -185,6 +199,9 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
         listCravings(supabase),
         listTellYouLater(supabase),
         listMemories(supabase),
+        listGroceryItems(supabase),
+        listCookedDishes(supabase),
+        listDishRatings(supabase),
       ]);
       setItems(itemsData);
       setEvents(eventsData);
@@ -192,6 +209,9 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
       setCravings(cravingsData);
       setTellYouLater(tellYouLaterData);
       setMemories(memoriesData);
+      setGroceryItems(groceryData);
+      setCookedDishes(cookedData);
+      setDishRatings(ratingsData);
       setLoadError("");
     } catch {
       setLoadError("Something didn't load. Please try again.");
@@ -416,7 +436,17 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
 
   function exportBackup() {
     downloadBackup(
-      buildBackup(items, events, proposals, cravings, tellYouLater, memories),
+      buildBackup(
+        items,
+        events,
+        proposals,
+        cravings,
+        tellYouLater,
+        memories,
+        groceryItems,
+        cookedDishes,
+        dishRatings,
+      ),
     );
   }
 
@@ -721,6 +751,23 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
               </div>
             )}
 
+            {/* Grocery list: what to pick up at the shop. */}
+            {layout.isVisible("grocery-list") && (
+              <div style={{ order: layout.indexOf("grocery-list") }}>
+                {editBar("grocery-list")}
+            <GrocerySection
+              items={groceryItems}
+              refresh={load}
+              me={me}
+              onPickIdentity={(person) => void saveIdentity(person)}
+              onNeedIdentity={() => setIdentityModal("first-run")}
+              identitySaving={identitySaving}
+              identityError={identityError}
+              {...collapseProps("grocery-list")}
+            />
+              </div>
+            )}
+
             {/* Tell you later: something to tell everyone else, a thing to
                 remember to do, or good news to celebrate later. */}
             {layout.isVisible("tell-you-later") && (
@@ -898,7 +945,24 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
               items={items}
               refresh={load}
               showAdd={false}
+              me={me}
               {...collapseProps("collection-recipe")}
+            />
+              </div>
+            )}
+            {layout.isVisible("cooked-together") && (
+              <div style={{ order: layout.indexOf("cooked-together") }}>
+                {editBar("cooked-together")}
+            <CookedSection
+              dishes={cookedDishes}
+              ratings={dishRatings}
+              refresh={load}
+              me={me}
+              onPickIdentity={(person) => void saveIdentity(person)}
+              onNeedIdentity={() => setIdentityModal("first-run")}
+              identitySaving={identitySaving}
+              identityError={identityError}
+              {...collapseProps("cooked-together")}
             />
               </div>
             )}
@@ -1120,7 +1184,10 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
                   Imported {importResult.items} ideas, {importResult.events}{" "}
                   plans, {importResult.proposals} dinner suggestions,{" "}
                   {importResult.cravings} cravings,{" "}
-                  {importResult.tellYouLater} tell-you-later notes, and{" "}
+                  {importResult.tellYouLater} tell-you-later notes,{" "}
+                  {importResult.groceryItems} grocery items,{" "}
+                  {importResult.cookedDishes} cooked dishes,{" "}
+                  {importResult.dishRatings} dish ratings, and{" "}
                   {importResult.memories} memories
                   {importResult.skipped > 0
                     ? ` (${importResult.skipped} rows skipped)`
@@ -1198,7 +1265,7 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
               identityError={identityError}
             />
             <CategorySection category="dinner" items={items} refresh={load} />
-            <CategorySection category="recipe" items={items} refresh={load} />
+            <CategorySection category="recipe" items={items} refresh={load} me={me} />
             <CategorySection category="craft" items={items} refresh={load} />
 
             <p className="mt-10 text-center">

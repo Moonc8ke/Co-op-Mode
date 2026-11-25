@@ -3,13 +3,14 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
+  addCookedDish,
   addItem,
   deleteItem,
   setItemStatus,
 } from "@/lib/data";
 import { CATEGORY_META, SEASONAL_SUGGESTIONS, SUGGESTIONS } from "@/lib/suggestions";
-import { fmtFull, SEASONS, seasonFor, SEASON_EMOJI } from "@/lib/seasons";
-import type { Category, Item, Season } from "@/lib/types";
+import { fmtFull, SEASONS, seasonFor, SEASON_EMOJI, todayStr } from "@/lib/seasons";
+import type { Category, Item, Person, Season } from "@/lib/types";
 import { DetailDialog, EmptyNote, SectionHeader, sectionPanelStyle } from "./shared";
 import { useBackLayer } from "@/lib/back-nav";
 
@@ -26,6 +27,9 @@ export function CategorySection({
   // page), the section is always open and has no arrow.
   collapsed,
   onToggleCollapsed,
+  // Who is signed in, so a recipe idea's "Cooked it" button can
+  // record who cooked it. Only recipe cards use it.
+  me,
 }: {
   category: Category;
   items: Item[];
@@ -33,6 +37,7 @@ export function CategorySection({
   showAdd?: boolean;
   collapsed?: boolean;
   onToggleCollapsed?: () => void;
+  me?: Person | null;
 }) {
   const meta = CATEGORY_META[category];
   const mine = items.filter((i) => i.category === category);
@@ -78,7 +83,7 @@ export function CategorySection({
               ) : (
                 <ul className="mt-3 space-y-2">
                   {open.map((i) => (
-                    <ItemCard key={i.id} item={i} refresh={refresh} />
+                    <ItemCard key={i.id} item={i} refresh={refresh} me={me} />
                   ))}
                 </ul>
               )}
@@ -87,6 +92,7 @@ export function CategorySection({
                   done={done}
                   label="Done together"
                   refresh={refresh}
+                  me={me}
                 />
               )}
             </>
@@ -154,10 +160,12 @@ function DoneGroup({
   done,
   label,
   refresh,
+  me,
 }: {
   done: Item[];
   label: string;
   refresh: () => void;
+  me?: Person | null;
 }) {
   return (
     <details className="mt-3">
@@ -166,7 +174,7 @@ function DoneGroup({
       </summary>
       <ul className="mt-2 space-y-2">
         {done.map((i) => (
-          <ItemCard key={i.id} item={i} refresh={refresh} />
+          <ItemCard key={i.id} item={i} refresh={refresh} me={me} />
         ))}
       </ul>
     </details>
@@ -176,9 +184,13 @@ function DoneGroup({
 export function ItemCard({
   item,
   refresh,
+  me,
 }: {
   item: Item;
   refresh: () => void;
+  /** Who is signed in, so a recipe idea's "Cooked it" button can
+   * record who cooked it. Only recipe cards use it. */
+  me?: Person | null;
 }) {
   const supabase = createClient();
   const meta = CATEGORY_META[item.category];
@@ -186,6 +198,35 @@ export function ItemCard({
   const [showDetail, setShowDetail] = useState(false);
   const [busy, setBusy] = useState(false);
   const isDone = item.status === "done";
+
+  // "Cooked it" (recipe ideas only): log this dish in Cooked
+  // together, with the date editable and defaulting to today.
+  const [showCookedForm, setShowCookedForm] = useState(false);
+  const [cookedDate, setCookedDate] = useState(todayStr());
+  const [cookedSaved, setCookedSaved] = useState(false);
+  const [cookedError, setCookedError] = useState("");
+
+  async function logCooked(e: FormEvent) {
+    e.preventDefault();
+    if (!cookedDate || busy) return;
+    setBusy(true);
+    setCookedError("");
+    try {
+      await addCookedDish(supabase, {
+        title: item.title,
+        cooked_date: cookedDate,
+        item_id: item.id,
+        cooked_by: me ?? null,
+      });
+      setCookedSaved(true);
+      setShowCookedForm(false);
+      refresh();
+    } catch {
+      setCookedError("That didn't save. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   // Back navigation: the detail is a back step (see src/lib/back-nav.ts).
   const detailNav = useBackLayer("item-detail", showDetail, () =>
@@ -370,6 +411,67 @@ export function ItemCard({
                 </p>
               )}
             </div>
+            {item.category === "recipe" && (
+              <div className="rounded-xl bg-[var(--bg)] p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--dim)]">
+                  Cooked together
+                </p>
+                {cookedSaved ? (
+                  <p className="mt-0.5 text-base">
+                    ✓ Logged in Cooked together — rate it there.
+                  </p>
+                ) : showCookedForm ? (
+                  <form
+                    onSubmit={logCooked}
+                    className="mt-2 flex flex-wrap items-center gap-2"
+                  >
+                    <input
+                      type="date"
+                      aria-label="Date cooked"
+                      value={cookedDate}
+                      onChange={(e) => setCookedDate(e.target.value)}
+                      className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-base"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!cookedDate || busy}
+                      className="rounded-full bg-[var(--gold)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
+                    >
+                      {busy ? "Saving…" : "Log it ✓"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowCookedForm(false)}
+                      className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-sm font-medium"
+                    >
+                      Never mind
+                    </button>
+                  </form>
+                ) : (
+                  <>
+                    <p className="mt-0.5 text-base">
+                      Made this one? Log it so you can both rate it.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCookedDate(todayStr());
+                        setCookedError("");
+                        setShowCookedForm(true);
+                      }}
+                      className="mt-2 rounded-full bg-[var(--gold)] px-4 py-2 text-sm font-semibold text-white"
+                    >
+                      🍳 Cooked it
+                    </button>
+                  </>
+                )}
+                {cookedError && (
+                  <p className="mt-1.5 text-sm text-[var(--rose)]">
+                    {cookedError}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">

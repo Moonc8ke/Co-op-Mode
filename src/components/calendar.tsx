@@ -3,7 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { addEvent, deleteEvent, setEventDone, updateEvent } from "@/lib/data";
-import { fmtDay, fmtFull, relDay, todayStr } from "@/lib/seasons";
+import { countdownLabel, fmtDay, fmtFull, relDay, todayStr } from "@/lib/seasons";
 import type { CalEvent } from "@/lib/types";
 import { DetailDialog, EmptyNote, SectionHeader, sectionPanelStyle } from "./shared";
 import { useBackLayer } from "@/lib/back-nav";
@@ -99,6 +99,13 @@ export function EventCard({
   // those as not done.
   const isDone = event.is_done === true;
   const rel = relDay(event.event_date);
+  // Opt-in countdown (migration 0013): only when the event asked for
+  // one, and never for past or done events. show_countdown is missing
+  // on rows read before migration 0013 ran; treat those as off.
+  const countdown =
+    !isDone && event.show_countdown === true
+      ? countdownLabel(event.event_date)
+      : null;
 
   // Edit form state, filled from the event when editing starts.
   const [editing, setEditing] = useState(false);
@@ -107,6 +114,7 @@ export function EventCard({
   const [editTime, setEditTime] = useState("");
   const [editLocation, setEditLocation] = useState("");
   const [editNotes, setEditNotes] = useState("");
+  const [editCountdown, setEditCountdown] = useState(false);
 
   // Back navigation: the detail is a back step, and the edit form
   // inside it is another one — back from editing returns to the
@@ -124,6 +132,7 @@ export function EventCard({
     setEditTime(event.event_time);
     setEditLocation(event.location);
     setEditNotes(event.notes);
+    setEditCountdown(event.show_countdown === true);
     setError("");
     setEditing(true);
     editNav.open();
@@ -141,6 +150,7 @@ export function EventCard({
         event_time: editTime.trim(),
         location: editLocation.trim(),
         notes: editNotes.trim(),
+        show_countdown: editCountdown,
       });
       // Saving finishes the edit, so unwind the history entry the edit
       // form pushed when it opened (closeViaUi also closes the form).
@@ -245,6 +255,11 @@ export function EventCard({
               {event.event_time ? ` · ${event.event_time}` : ""}
               {event.location ? ` · ${event.location}` : ""}
             </span>
+            {countdown && (
+              <span className="mt-1 inline-block rounded-full bg-[var(--teal-soft)] px-2.5 py-0.5 text-xs font-semibold text-[var(--teal)]">
+                ⏳ {countdown}
+              </span>
+            )}
             {isDone && event.done_at && (
               <span className="mt-0.5 block text-sm text-[var(--teal)]">
                 ✓ Done {fmtFull(event.done_at.slice(0, 10))}
@@ -374,6 +389,16 @@ export function EventCard({
                 placeholder="Notes (optional) — tickets, what to bring, who's driving"
                 className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm"
               />
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={editCountdown}
+                  onChange={(e) => setEditCountdown(e.target.checked)}
+                  className="h-5 w-5"
+                  style={{ accentColor: "var(--teal)" }}
+                />
+                Count down to this
+              </label>
               <div className="flex flex-wrap gap-2 pt-1">
                 <button
                   type="submit"
@@ -417,6 +442,13 @@ export function EventCard({
                   <span className="text-[var(--dim)]"> ({rel})</span>
                 ) : null}
               </dd>
+              {countdown && (
+                <dd className="mt-1.5">
+                  <span className="inline-block rounded-full bg-[var(--teal-soft)] px-2.5 py-1 text-sm font-semibold text-[var(--teal)]">
+                    ⏳ {countdown}
+                  </span>
+                </dd>
+              )}
               {event.event_time ? (
                 <dd className="mt-0.5 text-sm text-[var(--dim)]">
                   Time: {event.event_time}
@@ -534,6 +566,7 @@ function AddEventForm({ refresh }: { refresh: () => void }) {
   const [time, setTime] = useState("");
   const [location, setLocation] = useState("");
   const [notes, setNotes] = useState("");
+  const [countdown, setCountdown] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
 
@@ -549,11 +582,13 @@ function AddEventForm({ refresh }: { refresh: () => void }) {
         event_time: time.trim(),
         location: location.trim(),
         notes: notes.trim(),
+        show_countdown: countdown,
       });
       setTitle("");
       setTime("");
       setLocation("");
       setNotes("");
+      setCountdown(false);
       refresh();
     } catch {
       setError("That didn't save. Please try again.");
@@ -613,6 +648,16 @@ function AddEventForm({ refresh }: { refresh: () => void }) {
         placeholder="Notes (optional) — tickets, what to bring, who's driving"
         className="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm"
       />
+      <label className="mt-2 flex cursor-pointer items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={countdown}
+          onChange={(e) => setCountdown(e.target.checked)}
+          className="h-5 w-5"
+          style={{ accentColor: "var(--teal)" }}
+        />
+        Count down to this
+      </label>
       {error && <p className="mt-2 text-sm text-[var(--rose)]">{error}</p>}
     </form>
   );

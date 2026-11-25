@@ -66,6 +66,21 @@ export function relDay(ymd: string): string {
   return "";
 }
 
+/** Short countdown label for an event that opted in ("Today!",
+ * "Tomorrow", "in N days"). Null for past dates or unparseable
+ * ones — past or done events never show a countdown. */
+export function countdownLabel(ymd: string): string | null {
+  const today = todayStr();
+  const t = new Date(`${today}T00:00:00`).getTime();
+  const e = new Date(`${ymd}T00:00:00`).getTime();
+  if (Number.isNaN(e)) return null;
+  const diff = Math.round((e - t) / 86400000);
+  if (diff < 0) return null;
+  if (diff === 0) return "Today!";
+  if (diff === 1) return "Tomorrow";
+  return `in ${diff} days`;
+}
+
 export function fmtWhen(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";

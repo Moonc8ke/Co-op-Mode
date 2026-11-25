@@ -54,6 +54,11 @@ export interface CalEvent {
    * field missing, which the UI treats as not done. */
   is_done: boolean;
   done_at: string | null;
+  /** True when this event counts down in Coming up and its detail
+   * pop-out. Opt-in per event in the event form; off by default.
+   * Needs migration 0013_event_countdown.sql; rows read before it
+   * ran have this field missing, which the UI treats as off. */
+  show_countdown: boolean;
   /** The Relationship Space this row belongs to (migration 0007). */
   space_id: string | null;
   created_at: string;
@@ -126,8 +131,55 @@ export interface TellYouLater {
   space_id: string | null;
 }
 
+/** One thing to pick up at the shop (migration 0011). The note is
+ * the quantity or detail ("2 lbs", "the good kind"). Done items
+ * stay in the table so the app can show them in "Picked up" history;
+ * unchecking brings an item back. */
+export interface GroceryItem {
+  id: number;
+  title: string;
+  note: string;
+  wanted_by: Person;
+  is_done: boolean;
+  done_by: Person | null;
+  done_at: string | null;
+  /** The Relationship Space this row belongs to (migration 0007). */
+  space_id: string | null;
+  created_at: string;
+}
+
+/** One dish the space cooked together (migration 0012). item_id
+ * links back to the recipe idea it came from, or null for a
+ * standalone dish (and null if that idea is deleted). */
+export interface CookedDish {
+  id: number;
+  title: string;
+  cooked_date: string; // YYYY-MM-DD
+  item_id: number | null;
+  cooked_by: Person | null;
+  /** The Relationship Space this row belongs to (migration 0007). */
+  space_id: string | null;
+  created_at: string;
+}
+
+/** One person's star rating on a cooked dish (migration 0012).
+ * Each person has exactly one rating per dish — rating again
+ * overwrites it. */
+export interface DishRating {
+  id: number;
+  dish_id: number;
+  rated_by: Person;
+  stars: number; // 1-5
+  note: string;
+  /** The Relationship Space this row belongs to (migration 0007). */
+  space_id: string | null;
+  created_at: string;
+}
+
 /** The JSON backup format. Identical to the prototype's export so a backup
- * downloaded from the prototype can be imported here, and vice versa. */
+ * downloaded from the prototype can be imported here, and vice versa.
+ * The grocery, cooked-dish, and rating lists are newer than the
+ * prototype, so older backups simply don't have them. */
 export interface BackupPayload {
   exported_at: string;
   items: Item[];
@@ -135,6 +187,9 @@ export interface BackupPayload {
   dinner_proposals: DinnerProposal[];
   cravings: Craving[];
   tell_you_later: TellYouLater[];
+  grocery_items: GroceryItem[];
+  cooked_dishes: CookedDish[];
+  dish_ratings: DishRating[];
   memories: Array<{
     id: number;
     caption: string;
