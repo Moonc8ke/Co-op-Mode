@@ -165,7 +165,7 @@ export function ScrapbookSection({
           {monthGroups.map((group) => (
             <div key={group.key}>
               <div className="flex items-baseline gap-2">
-                <h3 className="font-display text-lg italic text-[var(--berry)]">
+                <h3 className="font-display text-2xl italic text-[var(--berry)]">
                   {group.label}
                 </h3>
                 <span className="text-xs text-[var(--dim)]">
