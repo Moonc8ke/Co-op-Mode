@@ -60,6 +60,7 @@ import { GrocerySection } from "./grocery";
 import { IdentityPickerModal } from "./identity";
 import { PushBanner } from "./push-banner";
 import { ScrapbookSection } from "./scrapbook";
+import SproutLoader from "./sprout-loader";
 import { TellYouLaterSection } from "./tell-you-later";
 import {
   EmptyNote,
@@ -639,11 +640,7 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
       <main className="mx-auto w-full max-w-3xl px-4 pb-16">
-        {loading && (
-          <p className="mt-10 text-center text-[var(--dim)]">
-            Loading your book…
-          </p>
-        )}
+        {loading && <SproutLoader />}
         {loadError && !loading && (
           <div className="mt-10 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-4">
             <p className="font-medium">Something didn&apos;t load.</p>
