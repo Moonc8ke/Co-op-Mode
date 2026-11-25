@@ -69,7 +69,7 @@ export default function SproutLoader() {
     <div
       className="flex min-h-[70vh] flex-col items-center justify-center gap-3"
       role="status"
-      aria-label="Loading your book"
+      aria-label="Loading your space"
     >
       <div className="sprout-loader relative h-24 w-24" aria-hidden="true">
         {FRAMES.map((rects, i) => (
@@ -84,7 +84,7 @@ export default function SproutLoader() {
           </svg>
         ))}
       </div>
-      <p className="text-center text-sm text-[var(--dim)]">Growing your book…</p>
+      <p className="text-center text-sm text-[var(--dim)]">Growing your space…</p>
       <style>{`
         .sprout-loader { animation: sprout-bob 2.4s ease-in-out infinite; }
         .sprout-loader svg {
