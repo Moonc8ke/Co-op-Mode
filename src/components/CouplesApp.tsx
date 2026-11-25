@@ -692,7 +692,7 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
               </h1>
               <p className="mt-2 max-w-md text-base text-[var(--dim)]">
                 This is your space — what&apos;s coming up, what you&apos;re
-                dreaming of, and what&apos;s decided, all in one place.
+                dreaming of, and what you&apos;ve shared, all in one place.
                 Tap “Add new things” when you want to add an idea or plan.
               </p>
               <button
