@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
   buildBackup,
@@ -320,7 +320,9 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
   // Home-page layout: which sections are shown, and in what order.
   // Kept in localStorage per device, so each person arranges their own
   // home page. Hiding a section never deletes anything. The Add &
-  // browse page doesn't use this, so its sections stay as they are.
+  // browse page reads the same order (see addSections below), but not
+  // the visibility — a section hidden on the home page still shows
+  // there, since hiding is a home display choice, not a removal.
   const layout = useHomeLayout();
   const [editingLayout, setEditingLayout] = useState(false);
   // Renders the edit controls above one section while Edit layout mode
@@ -485,6 +487,154 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
     await supabase.auth.signOut();
     window.location.href = "/login";
   }
+
+  // Add & browse page: every addable section, in the same order as the
+  // home page on this device (same layout hook, same localStorage).
+  // Sections hidden on the home page still show here, after the
+  // visible ones in default order — hiding is a home display choice,
+  // and the user still needs to add to that collection. "Pick for
+  // tonight" and the scrapbook have no add form, so they don't appear
+  // here; photos live in the scrapbook view. Anything not in the
+  // layout registry at all keeps its current relative order at the end
+  // (Array.sort is stable), rather than disappearing.
+  const addSections = (() => {
+    const sections: { id: HomeSectionId; el: ReactNode }[] = [
+      {
+        id: "seasonal",
+        el: (
+          <CategorySection category="seasonal" items={items} refresh={load} />
+        ),
+      },
+      {
+        id: "coming-up",
+        el: <CalendarSection events={events} refresh={load} />,
+      },
+      {
+        id: "collection-longterm",
+        el: (
+          <CategorySection category="longterm" items={items} refresh={load} />
+        ),
+      },
+      {
+        id: "collection-date",
+        el: <CategorySection category="date" items={items} refresh={load} />,
+      },
+      {
+        id: "collection-places",
+        el: (
+          <CategorySection category="places" items={items} refresh={load} />
+        ),
+      },
+      {
+        id: "dinner-week",
+        el: (
+          <DinnerDecisionsSection
+            proposals={proposals}
+            dinnerIdeas={items.filter(
+              (i) => i.category === "dinner" && i.status === "idea",
+            )}
+            compact
+            refresh={load}
+            me={me}
+            onPickIdentity={(person) => void saveIdentity(person)}
+            onNeedIdentity={() => setIdentityModal("first-run")}
+            identitySaving={identitySaving}
+            identityError={identityError}
+          />
+        ),
+      },
+      {
+        id: "cravings",
+        el: (
+          <CravingsSection
+            cravings={cravings}
+            compact
+            refresh={load}
+            me={me}
+            onPickIdentity={(person) => void saveIdentity(person)}
+            onNeedIdentity={() => setIdentityModal("first-run")}
+            identitySaving={identitySaving}
+            identityError={identityError}
+          />
+        ),
+      },
+      {
+        id: "grocery-list",
+        el: (
+          <GrocerySection
+            items={groceryItems}
+            refresh={load}
+            me={me}
+            onPickIdentity={(person) => void saveIdentity(person)}
+            onNeedIdentity={() => setIdentityModal("first-run")}
+            identitySaving={identitySaving}
+            identityError={identityError}
+          />
+        ),
+      },
+      {
+        id: "tell-you-later",
+        el: (
+          <TellYouLaterSection
+            entries={tellYouLater}
+            compact
+            refresh={load}
+            me={me}
+            onPickIdentity={(person) => void saveIdentity(person)}
+            onNeedIdentity={() => setIdentityModal("first-run")}
+            identitySaving={identitySaving}
+            identityError={identityError}
+          />
+        ),
+      },
+      {
+        id: "collection-dinner",
+        el: (
+          <CategorySection category="dinner" items={items} refresh={load} />
+        ),
+      },
+      {
+        id: "collection-recipe",
+        el: (
+          <CategorySection
+            category="recipe"
+            items={items}
+            refresh={load}
+            me={me}
+          />
+        ),
+      },
+      {
+        id: "cooked-together",
+        el: (
+          <CookedSection
+            dishes={cookedDishes}
+            ratings={dishRatings}
+            refresh={load}
+            me={me}
+            onPickIdentity={(person) => void saveIdentity(person)}
+            onNeedIdentity={() => setIdentityModal("first-run")}
+            identitySaving={identitySaving}
+            identityError={identityError}
+          />
+        ),
+      },
+      {
+        id: "collection-craft",
+        el: <CategorySection category="craft" items={items} refresh={load} />,
+      },
+    ];
+    const orderIndex = new Map(
+      [...layout.order, ...layout.hidden].map((id, i) => [id, i] as const),
+    );
+    return [...sections]
+      .sort(
+        (a, b) =>
+          (orderIndex.get(a.id) ?? Number.POSITIVE_INFINITY) -
+          (orderIndex.get(b.id) ?? Number.POSITIVE_INFINITY),
+      )
+      .map((s) => <Fragment key={s.id}>{s.el}</Fragment>);
+  })();
 
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
@@ -1207,7 +1357,8 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
 
         {!loading && !loadError && view === "add" && (
           <>
-            {/* Add page: every collection, its add form, and suggestions. */}
+            {/* Add page: every collection, its add form, and suggestions,
+                in the same order as the home page (see addSections). */}
             <header className="pt-6">
               <button
                 type="button"
@@ -1226,47 +1377,7 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
               </p>
             </header>
 
-            <CategorySection category="seasonal" items={items} refresh={load} />
-            <CalendarSection events={events} refresh={load} />
-            <CategorySection category="longterm" items={items} refresh={load} />
-            <CategorySection category="date" items={items} refresh={load} />
-            <CategorySection category="places" items={items} refresh={load} />
-            <DinnerDecisionsSection
-              proposals={proposals}
-              dinnerIdeas={items.filter(
-                (i) => i.category === "dinner" && i.status === "idea",
-              )}
-              compact
-              refresh={load}
-              me={me}
-              onPickIdentity={(person) => void saveIdentity(person)}
-              onNeedIdentity={() => setIdentityModal("first-run")}
-              identitySaving={identitySaving}
-              identityError={identityError}
-            />
-            <CravingsSection
-              cravings={cravings}
-              compact
-              refresh={load}
-              me={me}
-              onPickIdentity={(person) => void saveIdentity(person)}
-              onNeedIdentity={() => setIdentityModal("first-run")}
-              identitySaving={identitySaving}
-              identityError={identityError}
-            />
-            <TellYouLaterSection
-              entries={tellYouLater}
-              compact
-              refresh={load}
-              me={me}
-              onPickIdentity={(person) => void saveIdentity(person)}
-              onNeedIdentity={() => setIdentityModal("first-run")}
-              identitySaving={identitySaving}
-              identityError={identityError}
-            />
-            <CategorySection category="dinner" items={items} refresh={load} />
-            <CategorySection category="recipe" items={items} refresh={load} me={me} />
-            <CategorySection category="craft" items={items} refresh={load} />
+            {addSections}
 
             <p className="mt-10 text-center">
               <button
