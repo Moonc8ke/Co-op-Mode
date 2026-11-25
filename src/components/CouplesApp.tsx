@@ -691,8 +691,8 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
                 {season} together {SEASON_EMOJI[season]}
               </h1>
               <p className="mt-2 max-w-md text-base text-[var(--dim)]">
-                Everything in your book, in one place — what&apos;s coming
-                up, what you&apos;re dreaming of, and what&apos;s decided.
+                This is your space — what&apos;s coming up, what you&apos;re
+                dreaming of, and what&apos;s decided, all in one place.
                 Tap “Add new things” when you want to add an idea or plan.
               </p>
               <button
