@@ -1413,11 +1413,6 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
           </>
         )}
 
-        <footer className="mt-12 text-center text-xs text-[var(--dim)]">
-          Made for your space. Everything you add is saved here, ready for
-          the next “what should we do?”
-        </footer>
-
         {/* Who are you? — one-time picker the first time someone signs
             in, and the name-change form when opened from the header.
             The name is saved on their account; after that the
