@@ -10,6 +10,46 @@ import { useBackLayer } from "@/lib/back-nav";
 
 const ROTATIONS = ["-rotate-2", "rotate-1", "-rotate-1", "rotate-2", "rotate-0"];
 
+/** A month's memories, in the order they arrived (newest first). */
+interface MonthGroup {
+  key: string;
+  label: string;
+  memories: Memory[];
+}
+
+/** Groups memories by the year-month of their date, newest month
+ * first. A memory with no usable date lands in an "Undated" group at
+ * the end instead of disappearing (memory_date is required, so this
+ * should not happen, but backups can carry odd rows). */
+function groupByMonth(memories: Memory[]): MonthGroup[] {
+  const byKey = new Map<string, MonthGroup>();
+  const undated: Memory[] = [];
+  for (const m of memories) {
+    const match = /^(\d{4})-(\d{2})-\d{2}$/.exec(m.memory_date ?? "");
+    if (!match) {
+      undated.push(m);
+      continue;
+    }
+    const key = `${match[1]}-${match[2]}`;
+    let group = byKey.get(key);
+    if (!group) {
+      const label = new Date(
+        Number(match[1]),
+        Number(match[2]) - 1,
+        1,
+      ).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+      group = { key, label, memories: [] };
+      byKey.set(key, group);
+    }
+    group.memories.push(m);
+  }
+  const groups = [...byKey.values()];
+  if (undated.length > 0) {
+    groups.push({ key: "undated", label: "Undated", memories: undated });
+  }
+  return groups;
+}
+
 export function ScrapbookSection({
   memories,
   refresh,
@@ -98,6 +138,7 @@ export function ScrapbookSection({
   }, [selected, viewerNav]);
 
   const rotations = useMemo(() => ROTATIONS, []);
+  const monthGroups = useMemo(() => groupByMonth(memories), [memories]);
 
   return (
     <section
@@ -120,42 +161,58 @@ export function ScrapbookSection({
       {memories.length === 0 ? (
         <EmptyNote text="No memories pasted in yet. Add your first photo below — a hike, a dinner, an ordinary Tuesday that felt good." />
       ) : (
-        <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3">
-          {memories.map((m, idx) => (
-            <button
-              key={m.id}
-              type="button"
-              aria-label={`View memory: ${m.caption || fmtFull(m.memory_date)}`}
-              onClick={() => {
-                setSelected(m);
-                viewerNav.open();
-              }}
-              className={`tape relative bg-white p-2 pb-3 text-left shadow-md transition-transform ${rotations[idx % rotations.length] ?? ""}`}
-            >
-              {m.image_url ? (
-                <img
-                  src={m.image_url}
-                  alt={m.caption || `Memory from ${fmtFull(m.memory_date)}`}
-                  className="aspect-square w-full object-cover"
-                  loading="lazy"
-                />
-              ) : (
-                <div className="flex aspect-square w-full flex-col items-center justify-center bg-stone-100 p-3 text-center">
-                  <span aria-hidden className="text-3xl">
-                    🖼️
-                  </span>
-                  <span className="mt-2 text-xs leading-snug text-stone-500">
-                    Photo not in the backup — add it again if you have it.
-                  </span>
-                </div>
-              )}
-              <p className="font-display mt-2 line-clamp-2 px-1 text-sm italic leading-snug text-stone-700">
-                {m.caption || " "}
-              </p>
-              <p className="px-1 text-xs text-stone-500">
-                {fmtFull(m.memory_date)}
-              </p>
-            </button>
+        <div className="mt-5 space-y-7">
+          {monthGroups.map((group) => (
+            <div key={group.key}>
+              <div className="flex items-baseline gap-2">
+                <h3 className="font-display text-lg italic text-[var(--berry)]">
+                  {group.label}
+                </h3>
+                <span className="text-xs text-[var(--dim)]">
+                  {group.memories.length}{" "}
+                  {group.memories.length === 1 ? "memory" : "memories"}
+                </span>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3">
+                {group.memories.map((m, idx) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    aria-label={`View memory: ${m.caption || fmtFull(m.memory_date)}`}
+                    onClick={() => {
+                      setSelected(m);
+                      viewerNav.open();
+                    }}
+                    className={`tape relative bg-white p-2 pb-3 text-left shadow-md transition-transform ${rotations[idx % rotations.length] ?? ""}`}
+                  >
+                    {m.image_url ? (
+                      <img
+                        src={m.image_url}
+                        alt={m.caption || `Memory from ${fmtFull(m.memory_date)}`}
+                        className="aspect-square w-full object-cover"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="flex aspect-square w-full flex-col items-center justify-center bg-stone-100 p-3 text-center">
+                        <span aria-hidden className="text-3xl">
+                          🖼️
+                        </span>
+                        <span className="mt-2 text-xs leading-snug text-stone-500">
+                          Photo not in the backup — add it again if you have
+                          it.
+                        </span>
+                      </div>
+                    )}
+                    <p className="font-display mt-2 line-clamp-2 px-1 text-sm italic leading-snug text-stone-700">
+                      {m.caption || " "}
+                    </p>
+                    <p className="px-1 text-xs text-stone-500">
+                      {fmtFull(m.memory_date)}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       )}
