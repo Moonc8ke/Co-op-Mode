@@ -301,8 +301,11 @@ you want them back in the scrapbook.
 
 ## How sharing works
 
-- **Auth:** Supabase Auth with email + password. The app has a sign-in
-  page; unauthenticated visitors are redirected to it.
+- **Auth:** Supabase Auth with email + password. The login page has both
+  sign-in and self-serve sign-up (migration-free, added Nov 26): a new
+  account confirms by email, then lands in the spaceless setup flow to
+  create or join a space. Unauthenticated visitors are redirected to the
+  login page.
 - **Sharing model:** Row Level Security is enabled on every table, with a
   single policy per table: any signed-in user can read and write every
   row. This is a deliberate choice for a small family app — everyone in
@@ -386,7 +389,7 @@ src/
     layout.tsx            Root layout + metadata
     page.tsx              Home (requires sign-in, renders the app)
     globals.css           Warm paper theme (ported from the prototype)
-    login/page.tsx        Email + password sign-in
+    login/page.tsx        Email + password sign-in and self-serve sign-up
     auth/callback/route.ts  Supabase email-confirmation return trip
   components/
     CouplesApp.tsx        Views (home / add / scrapbook), season greeting,

@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
 /** Handles the email-confirmation / magic-link return trip from Supabase
- * Auth. With auto-confirmed accounts created in the dashboard this route
- * is rarely used, but it is here so confirmation links work. */
+ * Auth. New sign-ups confirm here: the code is exchanged for a session
+ * and the user lands in the app, where the spaceless setup flow (first
+ * name, then create or join a space) picks them up. */
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
