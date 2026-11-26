@@ -229,19 +229,42 @@ export async function listDinnerProposals(
   return data as DinnerProposal[];
 }
 
-function memoryFromRow(
+/** How long a scrapbook signed URL stays valid, in seconds (1 hour).
+ * The home page re-signs on every load, so a short life is fine and
+ * limits how useful a copied link is after the fact. */
+const SIGNED_PHOTO_URL_TTL_SECONDS = 3600;
+
+/** Turns stored scrapbook paths into short-lived signed URLs for
+ * display. The bucket is private (migration 0014), so public URLs no
+ * longer work — signing needs the SELECT policy from that migration.
+ * Paths that fail to sign (e.g. the file was removed) come back as
+ * null and the photo renders as its caption-only placeholder. */
+async function signPhotoUrls(
   supabase: SupabaseClient,
+  paths: (string | null)[],
+): Promise<(string | null)[]> {
+  const toSign = [...new Set(paths.filter((p): p is string => p !== null))];
+  if (toSign.length === 0) return paths.map(() => null);
+  const { data, error } = await supabase.storage
+    .from(SCRAPBOOK_BUCKET)
+    .createSignedUrls(toSign, SIGNED_PHOTO_URL_TTL_SECONDS);
+  if (error || !data) return paths.map(() => null);
+  const byPath = new Map(
+    data.map((entry) => [entry.path, entry.signedUrl ?? null]),
+  );
+  return paths.map((p) => (p === null ? null : (byPath.get(p) ?? null)));
+}
+
+function memoryFromRow(
   row: Record<string, unknown>,
+  signedUrl: string | null,
 ): Memory {
-  const path = row.storage_path as string | null;
   return {
     id: row.id as number,
     caption: (row.caption as string) ?? "",
     memory_date: row.memory_date as string,
     space_id: (row.space_id as string | null) ?? null,
-    image_url: path
-      ? supabase.storage.from(SCRAPBOOK_BUCKET).getPublicUrl(path).data.publicUrl
-      : null,
+    image_url: signedUrl,
     mime_type: (row.mime_type as string | null) ?? null,
     created_at: row.created_at as string,
   };
@@ -263,9 +286,12 @@ export async function listMemories(
     .order("memory_date", { ascending: false })
     .order("id", { ascending: false });
   if (error) throw error;
-  return (data as Record<string, unknown>[]).map((row) =>
-    memoryFromRow(supabase, row),
+  const rows = data as Record<string, unknown>[];
+  const signed = await signPhotoUrls(
+    supabase,
+    rows.map((row) => row.storage_path as string | null),
   );
+  return rows.map((row, i) => memoryFromRow(row, signed[i] ?? null));
 }
 
 export async function listCravings(
@@ -972,13 +998,18 @@ export async function addMemory(
   if (!args.file.type.startsWith("image/")) {
     throw new Error("Only image uploads are supported.");
   }
+  // Photos live under the space's own folder, so the storage rules in
+  // migration 0014 can tell one space's photos from another's. A
+  // spaceless account has no folder to upload to.
+  const spaceId = await getMySpaceId(supabase);
+  if (!spaceId) throw new Error(NO_SPACE_MESSAGE);
   const { blob, mimeType } = await preparePhoto(args.file);
   if (blob.size === 0) throw new Error("That photo looks empty.");
   if (blob.size > 12 * 1024 * 1024) {
     throw new Error("That photo is larger than 12 MB.");
   }
   const ext = mimeType === "image/png" ? "png" : mimeType === "image/webp" ? "webp" : "jpg";
-  const path = `memories/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
+  const path = `${spaceId}/memories/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
   const { error: uploadError } = await supabase.storage
     .from(SCRAPBOOK_BUCKET)
     .upload(path, blob, { contentType: mimeType, upsert: false });
@@ -990,7 +1021,7 @@ export async function addMemory(
       memory_date: args.memory_date,
       storage_path: path,
       mime_type: mimeType,
-      space_id: await getMySpaceId(supabase),
+      space_id: spaceId,
     })
     .select("id")
     .single();
