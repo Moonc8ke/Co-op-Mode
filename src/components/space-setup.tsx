@@ -296,23 +296,26 @@ export function SpaceSetupModal({
   );
 }
 
-/** The invite card for someone already in a space: the current
+/** The invite pop-out for someone already in a space: the current
  * code, a copyable link to share, when the code expires, and a way
  * to swap in a fresh code. Any member can share the code, and any
  * member can regenerate it — regenerating stops the old code
- * working at once, so the button asks twice. */
+ * working at once, so the button asks twice. It opens from a button
+ * on the home page rather than sitting there permanently. */
 export function SpaceInviteCard({
   inviteCode,
   inviteExpiresAt,
   regenerating,
   regenError,
   onRegenerate,
+  onClose,
 }: {
   inviteCode: string | null;
   inviteExpiresAt: string | null;
   regenerating: boolean;
   regenError: string;
   onRegenerate: () => void;
+  onClose: () => void;
 }) {
   const [copied, setCopied] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -342,10 +345,7 @@ export function SpaceInviteCard({
 
   if (!inviteCode) return null;
   return (
-    <section
-      aria-label="Invite someone to your space"
-      className="mt-6 rounded-[1.4rem] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-5"
-    >
+    <DetailDialog label="Invite someone to your space" onClose={onClose}>
       <h2 className="font-display text-xl font-semibold leading-tight">
         Invite someone to your space
       </h2>
@@ -396,6 +396,13 @@ export function SpaceInviteCard({
       {regenError && (
         <p className="mt-2 text-sm text-[var(--rose)]">{regenError}</p>
       )}
-    </section>
+      <button
+        type="button"
+        onClick={onClose}
+        className="mt-3 w-full rounded-full border border-[var(--border)] bg-[var(--bg)] px-4 py-2 text-sm font-medium"
+      >
+        Done
+      </button>
+    </DetailDialog>
   );
 }

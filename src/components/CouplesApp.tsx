@@ -151,6 +151,7 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [view, setView] = useState<View>("home");
+  const [inviteOpen, setInviteOpen] = useState(false);
 
   // Back navigation: the system back gesture and a swipe from the left
   // edge step back through the views and pop-outs instead of leaving
@@ -166,6 +167,11 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
     "view:scrapbook",
     view === "scrapbook",
     () => setView("home"),
+  );
+  // The invite pop-out is a back layer too, so the system back
+  // gesture and an edge swipe close it like the other pop-outs.
+  const inviteNav = useBackLayer("invite", inviteOpen, () =>
+    setInviteOpen(false),
   );
 
   // Identity: who is signed in. Read from the profiles table on session
@@ -901,16 +907,20 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
               </section>
             )}
 
-            {/* Invite card: the current code, a copyable link, and a
-                way to swap in a fresh one. Any member can share it. */}
+            {/* Invite: a button that opens the invite pop-out, rather
+                than the card sitting on the home page permanently.
+                Any member can share the code. */}
             {hasSpace && spaceInfo?.invite_code && (
-              <SpaceInviteCard
-                inviteCode={spaceInfo.invite_code}
-                inviteExpiresAt={spaceInfo.invite_expires_at}
-                regenerating={regenPending}
-                regenError={regenError}
-                onRegenerate={() => void onRegenerateCode()}
-              />
+              <button
+                type="button"
+                onClick={() => {
+                  setInviteOpen(true);
+                  inviteNav.open();
+                }}
+                className="mt-6 rounded-full bg-[var(--accent)] px-5 py-2.5 text-base font-semibold text-white"
+              >
+                Invite someone to your space
+              </button>
             )}
 
             {/* Push notifications: a one-time, dismissible offer to get
@@ -1615,6 +1625,19 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
             initialName={me ?? ""}
             onPick={(person) => void saveIdentity(person)}
             onDismiss={() => setIdentityModal(null)}
+          />
+        )}
+
+        {/* Invite pop-out: the current code, a copyable link, and a
+            way to swap in a fresh one. Opens from the button above. */}
+        {inviteOpen && hasSpace && spaceInfo?.invite_code && (
+          <SpaceInviteCard
+            inviteCode={spaceInfo.invite_code}
+            inviteExpiresAt={spaceInfo.invite_expires_at}
+            regenerating={regenPending}
+            regenError={regenError}
+            onRegenerate={() => void onRegenerateCode()}
+            onClose={() => inviteNav.closeViaUi()}
           />
         )}
       </main>
