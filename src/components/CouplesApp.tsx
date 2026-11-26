@@ -810,10 +810,7 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
           <>
             {/* Hero: just what's coming up, plus one way in to add things. */}
             <header className="pt-6">
-              <div className="flex items-start justify-between gap-3">
-                <p className="text-sm font-medium tracking-wide text-[var(--accent)]">
-                  {spaceName ?? "Our book"}
-                </p>
+              <div className="flex items-center justify-end">
                 <div className="flex items-center gap-2">
                   {me && (
                     <button
@@ -848,6 +845,9 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
                   </button>
                 </div>
               </div>
+              <p className="mt-2 text-center text-sm font-medium tracking-wide text-[var(--accent)]">
+                {spaceName ?? "Our book"}
+              </p>
               <h1 className="font-display mt-1 text-4xl font-semibold leading-tight">
                 {season} together {SEASON_EMOJI[season]}
               </h1>
