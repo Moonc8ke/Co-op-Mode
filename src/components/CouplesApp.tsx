@@ -825,6 +825,19 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
                       ✎ {me}
                     </button>
                   )}
+                  {hasSpace && spaceInfo?.invite_code && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInviteOpen(true);
+                        inviteNav.open();
+                      }}
+                      className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-xs font-medium text-[var(--dim)]"
+                      aria-label="Invite someone to your space"
+                    >
+                      Invite
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => void signOut()}
@@ -905,22 +918,6 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
                   Set up my space
                 </button>
               </section>
-            )}
-
-            {/* Invite: a button that opens the invite pop-out, rather
-                than the card sitting on the home page permanently.
-                Any member can share the code. */}
-            {hasSpace && spaceInfo?.invite_code && (
-              <button
-                type="button"
-                onClick={() => {
-                  setInviteOpen(true);
-                  inviteNav.open();
-                }}
-                className="mt-6 rounded-full bg-[var(--accent)] px-5 py-2.5 text-base font-semibold text-white"
-              >
-                Invite someone to your space
-              </button>
             )}
 
             {/* Push notifications: a one-time, dismissible offer to get
