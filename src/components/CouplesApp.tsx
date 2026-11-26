@@ -845,7 +845,7 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
                   </button>
                 </div>
               </div>
-              <p className="mt-2 text-center text-sm font-medium tracking-wide text-[var(--accent)]">
+              <p className="mt-2 text-center text-base font-medium tracking-wide text-[var(--accent)]">
                 {spaceName ?? "Our book"}
               </p>
               <h1 className="font-display mt-1 text-4xl font-semibold leading-tight">
