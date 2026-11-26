@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { INVITE_CODE_STORAGE_KEY } from "@/lib/data";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -10,6 +11,24 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+
+  // A shared invite link lands here with ?invite=… — stash the code
+  // so the app can prefill the join step after sign-in. The
+  // "ask the person who shared the app" line below stays as-is
+  // until self-serve signup arrives.
+  useEffect(() => {
+    try {
+      const code = new URLSearchParams(window.location.search).get("invite");
+      if (code && code.trim()) {
+        window.localStorage.setItem(
+          INVITE_CODE_STORAGE_KEY,
+          code.trim(),
+        );
+      }
+    } catch {
+      // localStorage unavailable; the code just won't prefill.
+    }
+  }, []);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();

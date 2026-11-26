@@ -325,10 +325,25 @@ you want them back in the scrapbook.
   index in the database backs that up. Two different spaces may still
   reuse the same name.
 - **Photos:** Scrapbook photos live in the `scrapbook-photos` storage
-  bucket (public for viewing, so they render with a plain `<img>` tag;
-  only signed-in users can upload or delete). Photo URLs include a
-  timestamp and random suffix, but anyone who has a URL can view that
-  photo — don't share photo links outside the two of you.
+  bucket, private since migration 0014: each space's photos sit under
+  its own `<space_id>/` folder, space-scoped storage rules allow only
+  that space's members in, and the app views photos through signed
+  URLs that expire after an hour. Older photos at the pre-0014 paths
+  keep working — their privacy rests on the scrapbook row that points
+  at them instead of the folder.
+- **Invites (migration 0015):** a signed-in account with no space yet
+  can create a space from the app — relationship (named after its
+  members, growing as people join: "Brian's space", "Brian and Luisa's
+  space", "Brian, Luisa, and Sarah's space") or family (named after a
+  last name, "the Smith family space") — or join one with an invite
+  code. Each space has one reusable code, good for 7 days; any member
+  can share it or swap in a fresh one, which stops the old code
+  working at once. Creating and joining run through SECURITY DEFINER
+  functions (`create_space`, `join_space_by_code`,
+  `regenerate_invite_code`) because a spaceless account can't read
+  the spaces table or insert into it under the space-scoped policies.
+  A first name is still typed in the setup flow — it is saved with
+  the space and is what ratings, cravings, and dinner posts show.
 - **Season greeting:** When the calendar season changes, the app shows a
   one-time "Welcome to Winter!" style greeting and offers to carry
   unfinished wishes from last season into the new one. Which season was

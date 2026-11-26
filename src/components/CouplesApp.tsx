@@ -5,11 +5,15 @@ import { createClient } from "@/lib/supabase/client";
 import {
   buildBackup,
   carryOverItems,
+  createMySpace,
+  deriveSpaceName,
   downloadBackup,
   getMyProfile,
   getMySpaceId,
-  getMySpaceName,
+  getMySpaceInfo,
   importBackup,
+  INVITE_CODE_STORAGE_KEY,
+  joinSpaceByCode,
   listCookedDishes,
   listCravings,
   listDinnerProposals,
@@ -19,6 +23,7 @@ import {
   listItems,
   listMemories,
   listTellYouLater,
+  regenerateInviteCode,
   setMyProfile,
   NAME_TAKEN_MESSAGE,
   NO_SPACE_MESSAGE,
@@ -44,6 +49,8 @@ import type {
   Memory,
   Person,
   Season,
+  SpaceInfo,
+  SpaceKind,
   TellYouLater,
 } from "@/lib/types";
 import {
@@ -60,6 +67,7 @@ import { GrocerySection } from "./grocery";
 import { IdentityPickerModal } from "./identity";
 import { PushBanner } from "./push-banner";
 import { ScrapbookSection } from "./scrapbook";
+import { SpaceInviteCard, SpaceSetupModal } from "./space-setup";
 import SproutLoader from "./sprout-loader";
 import { TellYouLaterSection } from "./tell-you-later";
 import {
@@ -164,13 +172,25 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
   // load, so the dinner and cravings forms already know who's typing.
   // Null until the person has picked a name.
   const [me, setMe] = useState<Person | null>(null);
-  // The space's display name for the header (e.g. "Andrew & Juliette").
-  // Null until loaded, or when the account has no space yet.
+  // The space's display name for the header (e.g. "Andrew and
+  // Juliette's space"). Null until loaded, or when the account has
+  // no space yet. Derived from the space's members (see
+  // deriveSpaceName), so it grows as people join.
   const [spaceName, setSpaceName] = useState<string | null>(null);
+  // The full space record for the invite card (code, expiry, kind).
+  // Null until loaded, or when the account has no space yet.
+  const [spaceInfo, setSpaceInfo] = useState<SpaceInfo | null>(null);
   // Whether the account belongs to a space yet. Null until the
   // identity load has run; false for a spaceless account, which
   // can't save a name and sees empty lists.
   const [hasSpace, setHasSpace] = useState<boolean | null>(null);
+  // Invite code from a shared link (?invite=… on the login page),
+  // stashed in localStorage there and read here after sign-in, so
+  // the setup flow can prefill the join step.
+  const [prefilledInviteCode, setPrefilledInviteCode] = useState("");
+  // Regenerating the invite code, and any error from it.
+  const [regenPending, setRegenPending] = useState(false);
+  const [regenError, setRegenError] = useState("");
   const [identityModal, setIdentityModal] = useState<
     "first-run" | "edit-name" | null
   >(null);
@@ -238,12 +258,25 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
       } catch {
         setHasSpace(null);
       }
-      // The space name is separate from the profile: it comes from the
-      // spaces table, and a missing one just falls back to "Our book"
-      // in the header.
+      // The space name and invite code are separate from the
+      // profile: they come from the spaces table (plus the member
+      // names the display name is derived from), and a missing one
+      // just falls back to "Our book" in the header.
       try {
-        setSpaceName(await getMySpaceName(supabase));
+        const info = await getMySpaceInfo(supabase);
+        setSpaceInfo(info);
+        setSpaceName(
+          info
+            ? deriveSpaceName(
+                info.kind,
+                info.family_name,
+                info.member_names,
+                info.stored_name,
+              )
+            : null,
+        );
       } catch {
+        setSpaceInfo(null);
         setSpaceName(null);
       }
     } catch {
@@ -271,6 +304,25 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
       setMe(person);
       setIdentityModal(null);
       setIdentityError("");
+      // A name change can change the derived space name (a
+      // relationship space is named after its members), so refresh
+      // it rather than showing the old one.
+      try {
+        const info = await getMySpaceInfo(supabase);
+        setSpaceInfo(info);
+        setSpaceName(
+          info
+            ? deriveSpaceName(
+                info.kind,
+                info.family_name,
+                info.member_names,
+                info.stored_name,
+              )
+            : null,
+        );
+      } catch {
+        // Keep the old space name; the lists still reloaded.
+      }
     } catch (err) {
       // The "name taken" message is written for the user, so show it
       // verbatim in the picker. A spaceless account can't save a name
@@ -302,6 +354,96 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // A shared invite link lands on the login page with ?invite=…,
+  // which stashes the code in localStorage; pick it up here so the
+  // setup flow can prefill the join step after sign-in.
+  useEffect(() => {
+    try {
+      const code = window.localStorage.getItem(INVITE_CODE_STORAGE_KEY);
+      if (code) setPrefilledInviteCode(code);
+    } catch {
+      // localStorage unavailable; the code just won't prefill.
+    }
+  }, []);
+
+  /** Clears a consumed invite code from localStorage and state. */
+  function clearPrefilledInviteCode() {
+    setPrefilledInviteCode("");
+    try {
+      window.localStorage.removeItem(INVITE_CODE_STORAGE_KEY);
+    } catch {
+      // ignore
+    }
+  }
+
+  /** Creates a space for a spaceless account (kind picker, family
+   * asks for a last name) and saves their first name onto it. */
+  async function createSpace(args: {
+    kind: SpaceKind;
+    displayName: string;
+    familyName?: string;
+  }) {
+    setIdentitySaving(true);
+    setIdentityError("");
+    try {
+      await createMySpace(supabase, args);
+      clearPrefilledInviteCode();
+      setIdentityModal(null);
+      setIdentityError("");
+      await load();
+    } catch (err) {
+      setIdentityError(
+        err instanceof Error
+          ? err.message
+          : "That didn't save. Please try again.",
+      );
+    } finally {
+      setIdentitySaving(false);
+    }
+  }
+
+  /** Joins a space with an invite code and saves the joiner's first
+   * name onto it. Errors are the invite RPC's friendly messages
+   * (wrong code, expired code, name already taken). */
+  async function joinSpace(args: { code: string; displayName: string }) {
+    setIdentitySaving(true);
+    setIdentityError("");
+    try {
+      await joinSpaceByCode(supabase, args);
+      clearPrefilledInviteCode();
+      setIdentityModal(null);
+      setIdentityError("");
+      await load();
+    } catch (err) {
+      setIdentityError(
+        err instanceof Error
+          ? err.message
+          : "That didn't save. Please try again.",
+      );
+    } finally {
+      setIdentitySaving(false);
+    }
+  }
+
+  /** Swaps in a fresh invite code for this space; the old code stops
+   * working at once. */
+  async function onRegenerateCode() {
+    setRegenPending(true);
+    setRegenError("");
+    try {
+      await regenerateInviteCode(supabase);
+      await load();
+    } catch (err) {
+      setRegenError(
+        err instanceof Error
+          ? err.message
+          : "That didn't work. Please try again.",
+      );
+    } finally {
+      setRegenPending(false);
+    }
+  }
 
   // Start each view at the top so switching feels like turning a page.
   useEffect(() => {
@@ -733,6 +875,43 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
                 </p>
               )}
             </header>
+
+            {/* Not part of a space yet: the way back into the setup
+                flow when the first-run picker was dismissed. */}
+            {hasSpace === false && (
+              <section
+                aria-label="Set up your space"
+                className="mt-6 rounded-[1.4rem] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-5"
+              >
+                <h2 className="font-display text-2xl font-semibold leading-tight">
+                  You&apos;re not part of a space yet
+                </h2>
+                <p className="mt-0.5 text-sm text-[var(--dim)]">
+                  Create a space for you and your people, or join one
+                  with a code someone shared. Nothing shows up here
+                  until then.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setIdentityModal("first-run")}
+                  className="mt-3 rounded-full bg-[var(--accent)] px-5 py-2.5 text-base font-semibold text-white"
+                >
+                  Set up my space
+                </button>
+              </section>
+            )}
+
+            {/* Invite card: the current code, a copyable link, and a
+                way to swap in a fresh one. Any member can share it. */}
+            {hasSpace && spaceInfo?.invite_code && (
+              <SpaceInviteCard
+                inviteCode={spaceInfo.invite_code}
+                inviteExpiresAt={spaceInfo.invite_expires_at}
+                regenerating={regenPending}
+                regenError={regenError}
+                onRegenerate={() => void onRegenerateCode()}
+              />
+            )}
 
             {/* Push notifications: a one-time, dismissible offer to get
                 a ping when someone else in your space posts something. */}
@@ -1413,18 +1592,27 @@ export default function CouplesApp({ userEmail }: { userEmail: string }) {
           </>
         )}
 
-        {/* Who are you? — one-time picker the first time someone signs
-            in, and the name-change form when opened from the header.
-            The name is saved on their account; after that the
-            dinner and cravings forms post as them silently. */}
-        {identityModal && (
+        {/* Who are you? — the setup flow the first time someone
+            signs in (create or join a space, saving their first name
+            with it), and the name-change form when opened from the
+            header. After the name is saved, the dinner and cravings
+            forms post as them silently. */}
+        {identityModal === "first-run" && (
+          <SpaceSetupModal
+            prefilledCode={prefilledInviteCode}
+            saving={identitySaving}
+            error={identityError}
+            onCreate={(args) => void createSpace(args)}
+            onJoin={(args) => void joinSpace(args)}
+            onDismiss={() => setIdentityModal(null)}
+          />
+        )}
+        {identityModal === "edit-name" && (
           <IdentityPickerModal
             saving={identitySaving}
             error={identityError}
             noSpace={hasSpace === false}
-            initialName={
-              identityModal === "edit-name" ? (me ?? "") : ""
-            }
+            initialName={me ?? ""}
             onPick={(person) => void saveIdentity(person)}
             onDismiss={() => setIdentityModal(null)}
           />

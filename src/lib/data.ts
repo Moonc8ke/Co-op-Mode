@@ -15,6 +15,8 @@ import type {
   Person,
   Profile,
   Season,
+  SpaceInfo,
+  SpaceKind,
   TellYouLater,
   TellYouLaterKind,
 } from "./types";
@@ -72,6 +74,11 @@ export async function getMySpaceId(
   cachedSpaceId = { userId: user.id, spaceId };
   return spaceId;
 }
+
+/** localStorage key where the login page stashes an invite code
+ * from a shared link (?invite=…), so the space-setup flow can
+ * prefill it after sign-in. */
+export const INVITE_CODE_STORAGE_KEY = "couples-app-invite-code";
 
 /** Friendly message shown when a name is already taken in the space.
  * Thrown by setMyProfile and surfaced verbatim by the identity
@@ -158,21 +165,241 @@ export async function setMyProfile(
   }
 }
 
-/** The signed-in user's space name (e.g. "Andrew & Juliette"), or
- * null when the account has no space yet. The spaces table's select
- * policy lets a member read their own space's row. */
+/** The signed-in user's space name (e.g. "Andrew and Juliette's
+ * space"), or null when the account has no space yet. The name is
+ * derived from the space's members (see deriveSpaceName), so it
+ * grows as people join and follows a name change — the stored
+ * `name` column in the spaces table is only a creation-time label.
+ * Needs migration 0015_invites.sql for the kind/family columns; if
+ * it hasn't run yet, the full select fails and the stored name is
+ * used instead, so the header never breaks mid-deploy. */
 export async function getMySpaceName(
   supabase: SupabaseClient,
 ): Promise<string | null> {
+  const info = await getMySpaceInfo(supabase);
+  if (!info) return null;
+  return deriveSpaceName(
+    info.kind,
+    info.family_name,
+    info.member_names,
+    info.stored_name,
+  );
+}
+
+/* ---------------- Invites & space names (migration 0015) ---------------- */
+
+/** Friendly messages for the invite flow, surfaced verbatim by the
+ * space-setup modal. */
+export const INVITE_CODE_INVALID_MESSAGE =
+  "That code didn't work — check it and try again.";
+export const INVITE_CODE_EXPIRED_MESSAGE =
+  "That code has expired. Ask someone in the space to share a fresh one.";
+export const INVITES_NOT_READY_MESSAGE =
+  "The invites update (migration 0015) hasn't run in Supabase yet — run it first, then try again.";
+
+/** The display name of a space, derived from its members so it
+ * always matches who is actually in it. A family space is "the
+ * Smith family space"; a relationship space is "Brian's space",
+ * "Brian and Luisa's space", or "Brian, Luisa, and Sarah's space"
+ * as members join. Falls back to the stored creation-time label
+ * when a relationship space has no member names to derive from. */
+export function deriveSpaceName(
+  kind: SpaceKind,
+  familyName: string | null,
+  memberNames: string[],
+  storedName?: string | null,
+): string {
+  if (kind === "family") {
+    const last = (familyName ?? "").trim();
+    if (last) return `the ${last} family space`;
+    return storedName ?? "the family space";
+  }
+  const names = memberNames.map((n) => n.trim()).filter(Boolean);
+  if (names.length === 0) return storedName ?? "Our space";
+  if (names.length === 1) return `${names[0]}'s space`;
+  if (names.length === 2) return `${names[0]} and ${names[1]}'s space`;
+  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}'s space`;
+}
+
+/** The signed-in user's space: kind, family name, invite code and
+ * expiry, and the member names the display name is derived from.
+ * Null when the account has no space yet. Members can read their
+ * own space's row and each other's profiles under the space-scoped
+ * policies (migration 0007). */
+export async function getMySpaceInfo(
+  supabase: SupabaseClient,
+): Promise<SpaceInfo | null> {
   const spaceId = await getMySpaceId(supabase);
   if (!spaceId) return null;
-  const { data, error } = await supabase
+  const { data: space, error } = await supabase
     .from("spaces")
-    .select("name")
+    .select("name, kind, family_name, invite_code, invite_expires_at")
     .eq("id", spaceId)
     .maybeSingle();
-  if (error) throw error;
-  return (data?.name as string | null) ?? null;
+  if (error) {
+    // Migration 0015 hasn't run yet, so the kind/family columns
+    // don't exist and the select fails. Fall back to the stored
+    // name rather than leaving the header blank.
+    if (/kind|family_name|invite_expires_at/i.test(error.message ?? "")) {
+      const fallback = await supabase
+        .from("spaces")
+        .select("name")
+        .eq("id", spaceId)
+        .maybeSingle();
+      if (fallback.error) throw fallback.error;
+      if (!fallback.data) return null;
+      return {
+        id: spaceId,
+        kind: "relationship",
+        family_name: null,
+        invite_code: null,
+        invite_expires_at: null,
+        member_names: [],
+        stored_name: fallback.data.name as string | null,
+      };
+    }
+    throw error;
+  }
+  if (!space) return null;
+  const row = space as {
+    name: string | null;
+    kind: string | null;
+    family_name: string | null;
+    invite_code: string | null;
+    invite_expires_at: string | null;
+  };
+  // A failed member lookup must not hide the space itself; the
+  // derived name just falls back to the stored label.
+  let memberNames: string[] = [];
+  try {
+    const { data: members, error: membersError } = await supabase
+      .from("profiles")
+      .select("display_name")
+      .eq("space_id", spaceId)
+      .order("created_at", { ascending: true });
+    if (!membersError && members) {
+      memberNames = (
+        members as Array<{ display_name: string }>
+      ).map((m) => m.display_name);
+    }
+  } catch {
+    memberNames = [];
+  }
+  return {
+    id: spaceId,
+    kind: row.kind === "family" ? "family" : "relationship",
+    family_name: row.family_name,
+    invite_code: row.invite_code,
+    invite_expires_at: row.invite_expires_at,
+    member_names: memberNames,
+    stored_name: row.name,
+  };
+}
+
+/** Clears the cached space id (see getMySpaceId). Creating or
+ * joining a space changes it, and the cached null from before would
+ * otherwise stick for the rest of the session. */
+function clearCachedSpaceId(): void {
+  cachedSpaceId = null;
+}
+
+/** Turns a database error from one of the invite RPCs into a
+ * message written for the user. The RPCs raise short codes
+ * (CODE_NOT_FOUND, CODE_EXPIRED, NAME_TAKEN) that PostgREST
+ * surfaces in the error message. */
+function mapInviteRpcError(error: { message?: string; code?: string }): Error {
+  const msg = error.message ?? "";
+  if (/CODE_EXPIRED/.test(msg)) return new Error(INVITE_CODE_EXPIRED_MESSAGE);
+  if (/CODE_NOT_FOUND/.test(msg)) return new Error(INVITE_CODE_INVALID_MESSAGE);
+  if (/NAME_TAKEN/.test(msg)) return new Error(NAME_TAKEN_MESSAGE);
+  if (/Could not find the function/i.test(msg) || error.code === "PGRST202") {
+    return new Error(INVITES_NOT_READY_MESSAGE);
+  }
+  return new Error(msg || "That didn't work. Please try again.");
+}
+
+/** Creates a space for a spaceless account and saves their first
+ * name onto it in one step (the profiles upsert needs a space, so
+ * the two can't happen separately). A relationship space is named
+ * after its members; a family space needs a last name. Returns the
+ * new space id and its invite code, which expires in 7 days.
+ * Needs migration 0015_invites.sql (the create_space function). */
+export async function createMySpace(
+  supabase: SupabaseClient,
+  args: {
+    kind: SpaceKind;
+    displayName: Person;
+    familyName?: string;
+  },
+): Promise<{
+  spaceId: string;
+  inviteCode: string;
+  inviteExpiresAt: string;
+}> {
+  const { data, error } = await supabase.rpc("create_space", {
+    p_kind: args.kind,
+    p_display_name: args.displayName.trim(),
+    p_family_name: (args.familyName ?? "").trim() || null,
+  });
+  if (error) throw mapInviteRpcError(error);
+  const row = (Array.isArray(data) ? data[0] : data) as
+    | {
+        space_id: string;
+        invite_code: string;
+        invite_expires_at: string;
+      }
+    | undefined;
+  if (!row) throw new Error("That didn't save. Please try again.");
+  clearCachedSpaceId();
+  return {
+    spaceId: row.space_id,
+    inviteCode: row.invite_code,
+    inviteExpiresAt: row.invite_expires_at,
+  };
+}
+
+/** Joins a space with its invite code and saves the joiner's first
+ * name onto it in one step. The code must exist and be inside its
+ * 7-day window; a name another member already uses is refused with
+ * the usual "already taken" message. Needs migration
+ * 0015_invites.sql (the join_space_by_code function). */
+export async function joinSpaceByCode(
+  supabase: SupabaseClient,
+  args: { code: string; displayName: Person },
+): Promise<{ spaceId: string }> {
+  const { data, error } = await supabase.rpc("join_space_by_code", {
+    p_code: args.code.trim(),
+    p_display_name: args.displayName.trim(),
+  });
+  if (error) throw mapInviteRpcError(error);
+  const row = (Array.isArray(data) ? data[0] : data) as
+    | { space_id: string }
+    | undefined;
+  if (!row) throw new Error("That didn't save. Please try again.");
+  clearCachedSpaceId();
+  return { spaceId: row.space_id };
+}
+
+/** Swaps in a fresh invite code for the signed-in user's space,
+ * with a new 7-day expiry; the old code stops working at once.
+ * Any member can do this. Needs migration 0015_invites.sql (the
+ * regenerate_invite_code function). */
+export async function regenerateInviteCode(
+  supabase: SupabaseClient,
+): Promise<{ inviteCode: string; inviteExpiresAt: string }> {
+  const { data, error } = await supabase.rpc("regenerate_invite_code");
+  if (error) throw mapInviteRpcError(error);
+  const row = (Array.isArray(data) ? data[0] : data) as
+    | {
+        invite_code: string;
+        invite_expires_at: string;
+      }
+    | undefined;
+  if (!row) throw new Error("That didn't save. Please try again.");
+  return {
+    inviteCode: row.invite_code,
+    inviteExpiresAt: row.invite_expires_at,
+  };
 }
 
 /* ---------------- Reads ---------------- */

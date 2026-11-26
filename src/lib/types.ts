@@ -15,6 +15,26 @@ export type Category =
  * any number of people. */
 export type Person = string;
 
+/** A space is a relationship (named after its members) or a family
+ * (named after a last name). Kind picker at creation, migration 0015. */
+export type SpaceKind = "relationship" | "family";
+
+/** What the app needs to know about the signed-in user's space:
+ * its kind and invite code (migration 0015), plus the member names
+ * the display name is derived from (see deriveSpaceName in data.ts).
+ * `stored_name` is the creation-time label in the spaces table,
+ * used only as a fallback when a relationship space has no member
+ * names to derive from yet. */
+export interface SpaceInfo {
+  id: string;
+  kind: SpaceKind;
+  family_name: string | null;
+  invite_code: string | null;
+  invite_expires_at: string | null;
+  member_names: string[];
+  stored_name: string | null;
+}
+
 /** One row per signed-in account, saying which person in the space
  * it is. The app reads this on sign-in so the dinner and cravings
  * forms already know who is typing. */
